@@ -15,6 +15,45 @@
 #define ADDR_IMMEDIATE 1
 #define ADDR_INDEXED   2
 
+//Códigs de operación
+#define OPC_SUM      0
+#define OPC_RES      1
+#define OPC_MULT     2
+#define OPC_DIVI     3
+#define OPC_LOAD     4
+#define OPC_STR      5
+#define OPC_LOADRX   6
+#define OPC_STRRX    7
+#define OPC_COMP     8
+#define OPC_JMPE     9
+#define OPC_JMPNE    10
+#define OPC_JMPLT    11
+#define OPC_JMPLGT   12
+#define OPC_SVC      13
+#define OPC_RETRN    14
+#define OPC_HAB      15
+#define OPC_DHAB     16
+#define OPC_TTI      17
+#define OPC_CHMOD    18
+#define OPC_LOADRB   19
+#define OPC_STRRB    20
+#define OPC_LOADRL   21
+#define OPC_STRRL    22
+#define OPC_LOADSP   23
+#define OPC_STRSP    24
+#define OPC_PSH      25
+#define OPC_POP      26
+#define OPC_J        27
+#define OPC_SDMAP    28
+#define OPC_SDMAC    29
+#define OPC_SDMAS    30
+#define OPC_SDMAIO   31
+#define OPC_SDMAM    32
+#define OPC_SDMAON   33
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+//Definimos estructura 
+
 //Palabra de memoria: 8 dígitos decimales + signo 
 typedef struct {
     int sign;          // 0 = positivo, 1 = negativo 
