@@ -8,7 +8,7 @@ int main() {
     cpu.PSW.condition = 0;
     cpu.PSW.mode = MODE_KERNEL;
     cpu.PSW.interrupt = 0;
-    cpu.PSW.unused = 0;
+    // cpu.PSW.unused = 0;  // <-- eliminar esta línea
     cpu.PSW.pc = 0;
 
     // Inicializar RAM
