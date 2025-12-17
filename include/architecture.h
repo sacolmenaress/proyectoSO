@@ -17,9 +17,12 @@
 
 //Palabra de memoria: 8 dígitos decimales + signo 
 typedef struct {
-    int sign;          //0 = positivo, 1 = negativo 
-    int value;        //* magnitud (0 – 99999999) 
+    int sign;          // 0 = positivo, 1 = negativo 
+    int value;        // magnitud (0 – 99999999) 
 } Word;
+
+int obtenerValorReal(Word w);
+void asignarValor(Word *w, int resultado);
 
 //Registros de memoria
 typedef struct {
@@ -59,7 +62,7 @@ typedef struct {
 
 // CPU virtual 
 typedef struct {
-    Word AC;           // Acumulador
+    Word AC;           // Registro Acumulador 
     MAR_t MAR;
     MDR_t MDR;
     IR_t IR;
