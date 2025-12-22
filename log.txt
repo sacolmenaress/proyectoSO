@@ -1,0 +1,20 @@
+
+Inicio de sesión: Mon Dec 22 16:25:47 2025
+PC=0, Ejecutando opcode=0
+AC=5, SP=300, Cond=2
+PC=1, Ejecutando opcode=0
+AC=10, SP=300, Cond=2
+PC=2, Ejecutando opcode=0
+AC=15, SP=300, Cond=2
+PC=3, Ejecutando opcode=0
+AC=20, SP=300, Cond=2
+PC=4, Ejecutando opcode=0
+AC=25, SP=300, Cond=2
+PC=5, Ejecutando opcode=0
+AC=30, SP=300, Cond=2
+PC=6, Ejecutando opcode=0
+AC=35, SP=300, Cond=2
+PC=7, Ejecutando opcode=0
+AC=40, SP=300, Cond=2
+Fin de sesión: Mon Dec 22 16:25:47 2025
+

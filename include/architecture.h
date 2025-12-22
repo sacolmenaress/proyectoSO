@@ -51,7 +51,7 @@
 #define OPC_SDMAM    32
 #define OPC_SDMAON   33
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+
 //Definimos estructura 
 
 //Palabra de memoria: 8 dígitos decimales + signo 
@@ -115,5 +115,12 @@ extern Word RAM[RAM_SIZE];
 
 // CPU global 
 extern CPU_t cpu;
+
+// Funciones de ejecución
+void fetch();
+void decodeExecute();
+void inicializarCPU(void);
+void ejecutarInst(void);  
+
 
 #endif
