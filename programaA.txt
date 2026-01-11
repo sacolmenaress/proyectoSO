@@ -1,0 +1,15 @@
+_start 300
+.NumeroPalabras 4
+.NombreProg ProgramaA
+// Load IMM 10 (AC = 10)
+// Op 04, Mode 1, Val 00010
+04100010
+// Sum IMM 5 (AC = 15)
+// Op 00, Mode 1, Val 00005
+00100005
+// Str DIRECT 500 (M[500] = 15)
+// Op 05, Mode 0, Val 00500
+05000500
+// JMP 303 (Infinite loop to stop safely)
+// Op 27, Mode 0, Val 00303
+27000303

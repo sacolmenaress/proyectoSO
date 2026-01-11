@@ -14,14 +14,15 @@ int obtenerValorReal(Word w) {
     return (w.sign == 1) ? -(w.value) : w.value;
 }
 
-// Asignar valor a la palabra (controlando signo y 7 dígitos)
+// Asignar valor a la palabra (controlando signo y magnitud)
+// Formato: 1 dígito signo + 7 dígitos magnitud = 8 dígitos totales
 void asignarValor(Word *w, int resultado) {
     if (resultado < 0) {
-        w->sign = 1;
-        w->value = abs(resultado) % 10000000;
+        w->sign = 1; //Signo negativo
+        w->value = abs(resultado) % 10000000;  // 7 dígitos: 0-9999999
     } else {
-        w->sign = 0;
-        w->value = resultado % 10000000;
+        w->sign = 0; //Signo positivo
+        w->value = resultado % 10000000;  // 7 dígitos: 0-9999999
     }
 }
 
@@ -97,14 +98,15 @@ int escribirMemoria(int direccion, Word w) {
     cpu.IR.opcode = 0;
     cpu.IR.addressing = 0;
     cpu.IR.operand = 0;
-    cpu.mp.base = OS_RESERVED;
+    cpu.mp.base = 0; 
     cpu.mp.limit = RAM_SIZE - 1;
     cpu.stack.rx = 0;
     cpu.stack.sp = OS_RESERVED;
     cpu.PSW.condition = 0;
-    cpu.PSW.mode = MODE_USER;
+    cpu.PSW.mode = MODE_USER; //Siempre inicia en modo usuario
     cpu.PSW.interrupt = 0;
     cpu.PSW.pc = 0;
+    cpu.halted = 0; // Inicializar flag de parada
 
     for (int i = 0; i < RAM_SIZE; i++) {
         RAM[i].sign = 0;
@@ -113,21 +115,78 @@ int escribirMemoria(int direccion, Word w) {
 }
 
 void fetch() {
-    if (!leerMemoria(cpu.PSW.pc, &cpu.MDR.data)) { // Interrupción ya activada en leerMemoria
+    // 1. Fase de Búsqueda: MAR <- PC
+    cpu.MAR.address = cpu.PSW.pc;
+
+    // 2. Leer Memoria: MDR <- Mem[MAR]
+    if (!leerMemoria(cpu.MAR.address, &cpu.MDR.data)) { // Interrupción ya activada en leerMemoria
+        cpu.halted = 1; // Detener si falla el fetch
         return;
     }
 
-    // Cargar instrucción en IR
+
     Word w = cpu.MDR.data;
     // Convertimos la palabra en 8 dígitos a los campos de IR
     int valor = obtenerValorReal(w);
     cpu.IR.opcode      = valor / 1000000;        // 2 dígitos
     cpu.IR.addressing  = (valor / 100000) % 10;  // 1 dígito
     cpu.IR.operand     = valor % 100000;         // 5 dígitos
+
+    // DEBUG
+    // printf("DEBUG: PC=%d, Fetched Val=%d, Opcode=%d\n", cpu.PSW.pc, valor, cpu.IR.opcode);
+
+}
+
+//Interpretar el modo de direccionamiento y obtener el operando
+int obtenerOperando(int *ok) {
+    Word w;
+
+    *ok = 1;
+
+    switch (cpu.IR.addressing) {
+
+        case ADDR_IMMEDIATE:
+            return cpu.IR.operand;
+
+        case ADDR_DIRECT:
+            if (!leerMemoria(cpu.IR.operand, &w)) {
+                *ok = 0;
+                return 0;
+            }
+            return obtenerValorReal(w);
+
+        case ADDR_INDEXED: {
+            int direccion = obtenerValorReal(cpu.AC) + cpu.IR.operand;
+            if (!leerMemoria(direccion, &w)) {
+                *ok = 0;
+                return 0;
+            }
+            return obtenerValorReal(w);
+        }
+
+        default:
+            printf("Interrupción: Modo de direccionamiento inválido (%d)\n",
+                   cpu.IR.addressing);
+            cpu.PSW.interrupt = 1;
+            *ok = 0;
+            return 0;
+    }
+}
+
+// Función auxiliar para actualizar PSW.condition (0=Cero, 1=Neg, 2=Pos, 3=Overflow)
+void actualizarCodCond(long long resultado) {
+    if (resultado > 9999999 || resultado < -9999999) {
+        cpu.PSW.condition = 3; // Overflow
+    } else if (resultado == 0) {
+        cpu.PSW.condition = 0; // Cero
+    } else if (resultado < 0) {
+        cpu.PSW.condition = 1; // Negativo (X < Y)
+    } else {
+        cpu.PSW.condition = 2; // Positivo (X > Y)
+    }
 }
 
 //Funcion que interpreta el opcode y llama a la función de ejecución correspondiente
-
 void decodeExecute() {
 switch(cpu.IR.opcode) {
 
@@ -136,8 +195,11 @@ switch(cpu.IR.opcode) {
         int valor = (cpu.IR.addressing == ADDR_IMMEDIATE) 
                     ? cpu.IR.operand 
                     : obtenerValorReal(RAM[cpu.IR.operand]);
-        asignarValor(&cpu.AC, obtenerValorReal(cpu.AC) + valor);
-        cambiarCodCond((obtenerValorReal(cpu.AC) == 0) ? 0 : (obtenerValorReal(cpu.AC) < 0 ? 1 : 2));
+        
+        long long resultado = (long long)obtenerValorReal(cpu.AC) + valor;
+        actualizarCodCond(resultado);
+        asignarValor(&cpu.AC, (int)resultado); // Se truncará si hubo overflow, pero el flag queda en 3
+
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
@@ -147,8 +209,11 @@ switch(cpu.IR.opcode) {
         int valor = (cpu.IR.addressing == ADDR_IMMEDIATE) 
                     ? cpu.IR.operand 
                     : obtenerValorReal(RAM[cpu.IR.operand]);
-        asignarValor(&cpu.AC, obtenerValorReal(cpu.AC) - valor);
-        cambiarCodCond((obtenerValorReal(cpu.AC) == 0) ? 0 : (obtenerValorReal(cpu.AC) < 0 ? 1 : 2));
+        
+        long long resultado = (long long)obtenerValorReal(cpu.AC) - valor;
+        actualizarCodCond(resultado);
+        asignarValor(&cpu.AC, (int)resultado);
+
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
@@ -158,8 +223,11 @@ switch(cpu.IR.opcode) {
         int valor = (cpu.IR.addressing == ADDR_IMMEDIATE) 
                     ? cpu.IR.operand 
                     : obtenerValorReal(RAM[cpu.IR.operand]);
-        asignarValor(&cpu.AC, obtenerValorReal(cpu.AC) * valor);
-        cambiarCodCond((obtenerValorReal(cpu.AC) == 0) ? 0 : (obtenerValorReal(cpu.AC) < 0 ? 1 : 2));
+        
+        long long resultado = (long long)obtenerValorReal(cpu.AC) * valor;
+        actualizarCodCond(resultado);
+        asignarValor(&cpu.AC, (int)resultado);
+
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
@@ -173,8 +241,9 @@ switch(cpu.IR.opcode) {
             printf("Interrupción: División por cero\n");
             cpu.PSW.interrupt = 1;
         } else {
-            asignarValor(&cpu.AC, obtenerValorReal(cpu.AC) / valor);
-            cambiarCodCond((obtenerValorReal(cpu.AC) == 0) ? 0 : (obtenerValorReal(cpu.AC) < 0 ? 1 : 2));
+            long long resultado = (long long)obtenerValorReal(cpu.AC) / valor;
+            actualizarCodCond(resultado);
+            asignarValor(&cpu.AC, (int)resultado);
         }
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
@@ -182,10 +251,15 @@ switch(cpu.IR.opcode) {
 
     case OPC_LOAD: { // 4
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        int dir = cpu.IR.operand;
-        if(leerMemoria(dir, &cpu.AC)) {
-            log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
+        if (cpu.IR.addressing == ADDR_IMMEDIATE) {
+             asignarValor(&cpu.AC, cpu.IR.operand);
+        } else {
+             int dir = cpu.IR.operand;
+             if(leerMemoria(dir, &cpu.AC)) {
+                 // OK
+             }
         }
+        log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
 
@@ -214,10 +288,19 @@ switch(cpu.IR.opcode) {
 
     case OPC_COMP: { // 8
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        int valor = (cpu.IR.addressing == ADDR_IMMEDIATE) 
+        int a = obtenerValorReal(cpu.AC);
+        int b = (cpu.IR.addressing == ADDR_IMMEDIATE) 
                     ? cpu.IR.operand 
                     : obtenerValorReal(RAM[cpu.IR.operand]);
-        cambiarCodCond((obtenerValorReal(cpu.AC) == valor) ? 0 : (obtenerValorReal(cpu.AC) < valor ? 1 : 2));
+        
+        if (a == b) {
+            cpu.PSW.condition = 0; // X = Y
+        } else if (a < b) {
+            cpu.PSW.condition = 1; // X < Y
+        } else {
+            cpu.PSW.condition = 2; // X > Y
+        }
+        
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
@@ -270,14 +353,16 @@ switch(cpu.IR.opcode) {
 
     case OPC_HAB: { // 15
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        habilitarInterrupciones(1);
+        cpu.PSW.interrupt = 1; // Interrupciones Habilitadas = 1
+        printf("Sistema: Interrupciones habilitadas (HSW.int=1)\n");
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
 
     case OPC_DHAB: { // 16
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        habilitarInterrupciones(0);
+        cpu.PSW.interrupt = 0; // Interrupciones Deshabilitadas = 0
+        printf("Sistema: Interrupciones deshabilitadas (PSW.int=0)\n");
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
@@ -354,7 +439,8 @@ switch(cpu.IR.opcode) {
 
     case OPC_J: { // 27
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        cpu.PSW.pc = cpu.IR.operand;
+        printf("DEBUG: Executing JMP to %d\n", cpu.IR.operand);
+        cpu.PSW.pc = cpu.IR.operand - 1; // -1 because incrementPC will add 1
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }

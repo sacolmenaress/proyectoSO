@@ -1,7 +1,7 @@
 #ifndef ARCHITECTURE_H
 #define ARCHITECTURE_H
 
-#include <pthread.h>
+
 #include <signal.h>
 
 // Constantes del sistema 
@@ -54,10 +54,10 @@
 
 //Definimos estructura 
 
-//Palabra de memoria: 8 dígitos decimales + signo 
+//Palabra de memoria: 1 dígito signo + 7 dígitos magnitud = 8 total
 typedef struct {
     int sign;          // 0 = positivo, 1 = negativo 
-    int value;        // magnitud (0 – 99999999) 
+    int value;        // magnitud (0 – 9999999) - 7 dígitos
 } Word;
 
 int obtenerValorReal(Word w);
@@ -101,13 +101,14 @@ typedef struct {
 
 // CPU virtual 
 typedef struct {
-    Word AC;           // Registro Acumulador 
-    MAR_t MAR;
-    MDR_t MDR;
-    IR_t IR;
-    MemoryProtection_t mp;
-    StackRegisters_t stack;
-    PSW_t PSW;
+    Word AC;           // Registro Acumulador, ejecución
+    MAR_t MAR;         //Registro de dirección, fetch
+    MDR_t MDR;         //Registro de datos, lectura/escritura
+    IR_t IR;           //Registro de instrucción, decodificación
+    MemoryProtection_t mp; //Registros de protección
+    StackRegisters_t stack; //Registros de pila
+    PSW_t PSW;         //Registro de estado
+    int halted;        // Flag para detener la simulación (separado de PSW.interrupt)
 } CPU_t;
 
 // Memoria principal 
@@ -121,6 +122,8 @@ void fetch();
 void decodeExecute();
 void inicializarCPU(void);
 void ejecutarInst(void);  
+int obtenerOperando(int *ok);
+
 
 
 #endif

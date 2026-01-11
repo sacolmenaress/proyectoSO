@@ -1,0 +1,15 @@
+_start 400
+.NumeroPalabras 4
+.NombreProg ProgramaB
+// Load DIRECT 500 (AC = M[500]) - Should be 15
+// Op 04, Mode 0, Val 00500
+04000500
+// Sum IMM 1 (AC = 16)
+// Op 00, Mode 1, Val 00001
+00100001
+// Str DIRECT 500 (M[500] = 16)
+// Op 05, Mode 0, Val 00500
+05000500
+// JMP 403 (Loop)
+// Op 27, Mode 0, Val 00403
+27000403
