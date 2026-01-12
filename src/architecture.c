@@ -47,7 +47,7 @@ void habilitarInterrupciones(int valor) {
 int validarPC(int pc) {
     if (pc < 0 || pc >= RAM_SIZE) {
         printf("Interrupción: Direccionamiento inválido (PC=%d)\n", pc);
-        cpu.PSW.interrupt = 1;
+        cpu.halted = 1;
         return 0;
     }
     return 1;
@@ -61,11 +61,12 @@ void incrementarPC() {
 
 // Leer memoria (respetando RB y RL)
 int leerMemoria(int direccion, Word *w) {
+    //Sumamos la direccion base si estamos en modo usuario (+ 300)
     int dirReal = (cpu.PSW.mode == MODE_KERNEL) ? direccion : direccion + cpu.mp.base;
 
     if (dirReal < cpu.mp.base || dirReal > cpu.mp.limit) {
         printf("Interrupción: Direccionamiento inválido (direccion=%d)\n", dirReal);
-        cpu.PSW.interrupt = 1;
+        cpu.halted = 1;
         return 0;
     }
 
@@ -75,11 +76,12 @@ int leerMemoria(int direccion, Word *w) {
 
 // Escribir memoria (respetando RB y RL)
 int escribirMemoria(int direccion, Word w) {
+    //Sumamos la direccion base si estamos en modo usuario (+ 300)
     int dirReal = (cpu.PSW.mode == MODE_KERNEL) ? direccion : direccion + cpu.mp.base;
 
     if (dirReal < cpu.mp.base || dirReal > cpu.mp.limit) {
         printf("Interrupción: Direccionamiento inválido (direccion=%d)\n", dirReal);
-        cpu.PSW.interrupt = 1;
+        cpu.halted = 1;
         return 0;
     }
 
@@ -98,7 +100,7 @@ int escribirMemoria(int direccion, Word w) {
     cpu.IR.opcode = 0;
     cpu.IR.addressing = 0;
     cpu.IR.operand = 0;
-    cpu.mp.base = 0; 
+    cpu.mp.base = OS_RESERVED; 
     cpu.mp.limit = RAM_SIZE - 1;
     cpu.stack.rx = 0;
     cpu.stack.sp = OS_RESERVED;
@@ -166,8 +168,8 @@ int obtenerOperando(int *ok) {
 
         default:
             printf("Interrupción: Modo de direccionamiento inválido (%d)\n",
-                   cpu.IR.addressing);
-            cpu.PSW.interrupt = 1;
+                cpu.IR.addressing);
+            cpu.halted = 1;
             *ok = 0;
             return 0;
     }
@@ -192,56 +194,10 @@ switch(cpu.IR.opcode) {
 
     case OPC_SUM: { // 0
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        int valor = (cpu.IR.addressing == ADDR_IMMEDIATE) 
-                    ? cpu.IR.operand 
-                    : obtenerValorReal(RAM[cpu.IR.operand]);
-        
-        long long resultado = (long long)obtenerValorReal(cpu.AC) + valor;
-        actualizarCodCond(resultado);
-        asignarValor(&cpu.AC, (int)resultado); // Se truncará si hubo overflow, pero el flag queda en 3
-
-        log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
-        break;
-    }
-
-    case OPC_RES: { // 1
-        log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        int valor = (cpu.IR.addressing == ADDR_IMMEDIATE) 
-                    ? cpu.IR.operand 
-                    : obtenerValorReal(RAM[cpu.IR.operand]);
-        
-        long long resultado = (long long)obtenerValorReal(cpu.AC) - valor;
-        actualizarCodCond(resultado);
-        asignarValor(&cpu.AC, (int)resultado);
-
-        log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
-        break;
-    }
-
-    case OPC_MULT: { // 2
-        log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        int valor = (cpu.IR.addressing == ADDR_IMMEDIATE) 
-                    ? cpu.IR.operand 
-                    : obtenerValorReal(RAM[cpu.IR.operand]);
-        
-        long long resultado = (long long)obtenerValorReal(cpu.AC) * valor;
-        actualizarCodCond(resultado);
-        asignarValor(&cpu.AC, (int)resultado);
-
-        log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
-        break;
-    }
-
-    case OPC_DIVI: { // 3
-        log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        int valor = (cpu.IR.addressing == ADDR_IMMEDIATE) 
-                    ? cpu.IR.operand 
-                    : obtenerValorReal(RAM[cpu.IR.operand]);
-        if(valor == 0) {
-            printf("Interrupción: División por cero\n");
-            cpu.PSW.interrupt = 1;
-        } else {
-            long long resultado = (long long)obtenerValorReal(cpu.AC) / valor;
+        int ok;
+        int valor = obtenerOperando(&ok);
+        if (ok) {
+            long long resultado = (long long)obtenerValorReal(cpu.AC) + valor;
             actualizarCodCond(resultado);
             asignarValor(&cpu.AC, (int)resultado);
         }
@@ -249,15 +205,56 @@ switch(cpu.IR.opcode) {
         break;
     }
 
+    case OPC_RES: { // 1
+        log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
+        int ok;
+        int valor = obtenerOperando(&ok);
+        if (ok) {
+            long long resultado = (long long)obtenerValorReal(cpu.AC) - valor;
+            actualizarCodCond(resultado);
+            asignarValor(&cpu.AC, (int)resultado);
+        }
+        log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
+        break;
+    }
+
+    case OPC_MULT: { // 2
+        log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
+        int ok;
+        int valor = obtenerOperando(&ok);
+        if (ok) {
+            long long resultado = (long long)obtenerValorReal(cpu.AC) * valor;
+            actualizarCodCond(resultado);
+            asignarValor(&cpu.AC, (int)resultado);
+        }
+        log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
+        break;
+    }
+
+    case OPC_DIVI: { // 3
+        log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
+        int ok;
+        int valor = obtenerOperando(&ok);
+        if (ok) {
+            if(valor == 0) {
+                printf("Interrupción: División por cero\n");
+                cpu.halted = 1;
+            } else {
+                long long resultado = (long long)obtenerValorReal(cpu.AC) / valor;
+                actualizarCodCond(resultado);
+                asignarValor(&cpu.AC, (int)resultado);
+            }
+        }
+        log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
+        break;
+    }
+
     case OPC_LOAD: { // 4
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        if (cpu.IR.addressing == ADDR_IMMEDIATE) {
-             asignarValor(&cpu.AC, cpu.IR.operand);
-        } else {
-             int dir = cpu.IR.operand;
-             if(leerMemoria(dir, &cpu.AC)) {
-                 // OK
-             }
+        int ok;
+        int valor = obtenerOperando(&ok);
+        if (ok) {
+            asignarValor(&cpu.AC, valor);
         }
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
@@ -265,10 +262,23 @@ switch(cpu.IR.opcode) {
 
     case OPC_STR: { // 5
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        int dir = cpu.IR.operand;
-        if(escribirMemoria(dir, cpu.AC)) {
-            log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
+        int dir;
+        int ok = 1;
+
+        if (cpu.IR.addressing == ADDR_DIRECT) {
+            dir = cpu.IR.operand;
+        } else if (cpu.IR.addressing == ADDR_INDEXED) {
+            dir = obtenerValorReal(cpu.AC) + cpu.IR.operand;
+        } else {
+            printf("Interrupción: Modo de direccionamiento inválido para STR (%d)\n", cpu.IR.addressing);
+            cpu.halted = 1;
+            ok = 0;
         }
+
+        if (ok) {
+            escribirMemoria(dir, cpu.AC);
+        }
+        log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
 
@@ -288,19 +298,19 @@ switch(cpu.IR.opcode) {
 
     case OPC_COMP: { // 8
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
+        int ok;
         int a = obtenerValorReal(cpu.AC);
-        int b = (cpu.IR.addressing == ADDR_IMMEDIATE) 
-                    ? cpu.IR.operand 
-                    : obtenerValorReal(RAM[cpu.IR.operand]);
+        int b = obtenerOperando(&ok);
         
-        if (a == b) {
-            cpu.PSW.condition = 0; // X = Y
-        } else if (a < b) {
-            cpu.PSW.condition = 1; // X < Y
-        } else {
-            cpu.PSW.condition = 2; // X > Y
+        if (ok) {
+            if (a == b) {
+                cpu.PSW.condition = 0; // X = Y
+            } else if (a < b) {
+                cpu.PSW.condition = 1; // X < Y
+            } else {
+                cpu.PSW.condition = 2; // X > Y
+            }
         }
-        
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
@@ -439,8 +449,12 @@ switch(cpu.IR.opcode) {
 
     case OPC_J: { // 27
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        printf("DEBUG: Executing JMP to %d\n", cpu.IR.operand);
-        cpu.PSW.pc = cpu.IR.operand - 1; // -1 because incrementPC will add 1
+        int target = cpu.IR.operand;
+        if (cpu.IR.addressing == ADDR_INDEXED) {
+            target = obtenerValorReal(cpu.AC) + cpu.IR.operand;
+        }
+        printf("DEBUG: Executing JMP to logical address %d\n", target);
+        cpu.PSW.pc = target - 1; // -1 porque incrementarPC sumará 1
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
@@ -459,7 +473,7 @@ switch(cpu.IR.opcode) {
     default: {
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
         printf("Interrupción: Instrucción inválida (opcode=%d)\n", cpu.IR.opcode);
-        cpu.PSW.interrupt = 1;
+        cpu.halted = 1;
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
@@ -468,7 +482,7 @@ switch(cpu.IR.opcode) {
 
 
 void ejecutarInst() {
-    if(cpu.PSW.interrupt) return;  // No ejecuta instrucción si hay interrupción activa
+    if(cpu.halted) return;  // No ejecuta instrucción si el sistema está detenido
     fetch();
     decodeExecute();
     incrementarPC();

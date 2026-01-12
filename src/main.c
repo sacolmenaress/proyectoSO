@@ -24,7 +24,7 @@ void command_load(const char *filename) {
         return;
     }
 
-    int address = 0;
+    int address = OS_RESERVED; //Para empezar despues de las 300 direcciones reservadas del SO
     char line[256];
     
     // Leer linea por linea
@@ -41,19 +41,18 @@ void command_load(const char *filename) {
         // Intentar leer un numero de la linea
         int raw_val;
         if (sscanf(line, "%d", &raw_val) == 1) {
-             if (address >= RAM_SIZE) {
-                 printf("Advertencia: Programa excede tamano de memoria RAM.\n");
-                 break;
-             }
-             
-             if (raw_val < 0) {
+            if (address >= RAM_SIZE) {
+                printf("Advertencia: Programa excede tamano de memoria RAM.\n");
+                break;
+            }         
+            if (raw_val < 0) {
                 RAM[address].sign = 1;
                 RAM[address].value = -raw_val;
-             } else {
+            } else {
                 RAM[address].sign = 0;
                 RAM[address].value = raw_val;
-             }
-             address++;
+            }
+            address++;
         }
     }
     

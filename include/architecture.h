@@ -6,7 +6,7 @@
 
 // Constantes del sistema 
 #define RAM_SIZE 2000
-#define OS_RESERVED 300
+#define OS_RESERVED 300 // 300 direcciones reservadas para el SO
 
 #define MODE_KERNEL 1
 #define MODE_USER   0
