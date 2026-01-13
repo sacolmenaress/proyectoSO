@@ -25,7 +25,8 @@ src/log.o: src/log.c include/log.h
 	$(CC) $(CFLAGS) -c src/log.c -o src/log.o
 
 clean:
-	rm -f $(TARGET) src/*.o
+	if exist $(TARGET) del /f /q $(TARGET)
+	if exist src\*.o del /f /q src\*.o
 
 run: $(TARGET)
 	./$(TARGET)

@@ -39,19 +39,23 @@ void command_load(const char *filename) {
         if (line[0] == '/' || line[0] == '.' || line[0] == '_') continue;
 
         // Intentar leer un numero de la linea
-        int raw_val;
-        if (sscanf(line, "%d", &raw_val) == 1) {
+        long long raw_val; // Usar long long por seguridad con 8 dígitos
+        if (sscanf(line, "%I64d", &raw_val) == 1) {
             if (address >= RAM_SIZE) {
                 printf("Advertencia: Programa excede tamano de memoria RAM.\n");
                 break;
-            }         
+            }
+            // Formato de 8 dígitos: S MMMMMMM
+            // Separamos el primer dígito (signo o parte del opcode) de los otros 7 (magnitud)
+            long long abs_val = llabs(raw_val);
+            RAM[address].sign = (int)(abs_val / 10000000);
+            RAM[address].value = (int)(abs_val % 10000000);
+            
+            // Si el número original era negativo, forzamos signo 1 (compatibilidad datos)
             if (raw_val < 0) {
                 RAM[address].sign = 1;
-                RAM[address].value = -raw_val;
-            } else {
-                RAM[address].sign = 0;
-                RAM[address].value = raw_val;
             }
+            
             address++;
         }
     }

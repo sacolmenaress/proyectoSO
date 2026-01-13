@@ -1,0 +1,88 @@
+
+--- Nueva Sesión del Simulador: Mon Jan 12 21:34:03 2026
+PC=0, Ejecutando opcode=4
+AC=100, SP=300, Cond=0
+PC=1, Ejecutando opcode=0
+AC=150, SP=300, Cond=2
+PC=2, Ejecutando opcode=2
+AC=300, SP=300, Cond=2
+PC=3, Ejecutando opcode=3
+AC=100, SP=300, Cond=2
+PC=4, Ejecutando opcode=1
+AC=80, SP=300, Cond=2
+PC=5, Ejecutando opcode=25
+AC=80, SP=301, Cond=2
+PC=6, Ejecutando opcode=4
+AC=80, SP=301, Cond=2
+PC=7, Ejecutando opcode=8
+AC=80, SP=301, Cond=0
+PC=8, Ejecutando opcode=15
+AC=80, SP=301, Cond=0
+PC=9, Ejecutando opcode=16
+AC=80, SP=301, Cond=0
+PC=10, Ejecutando opcode=17
+AC=80, SP=301, Cond=0
+PC=11, Ejecutando opcode=13
+AC=80, SP=301, Cond=0
+PC=12, Ejecutando opcode=4
+AC=29, SP=301, Cond=0
+PC=13, Ejecutando opcode=5
+AC=29, SP=301, Cond=0
+PC=14, Ejecutando opcode=4
+AC=19, SP=301, Cond=0
+PC=15, Ejecutando opcode=25
+AC=19, SP=302, Cond=0
+PC=16, Ejecutando opcode=9
+AC=19, SP=302, Cond=0
+PC=29, Ejecutando opcode=31
+AC=19, SP=302, Cond=0
+PC=30, Ejecutando opcode=33
+AC=19, SP=302, Cond=0
+PC=31, Ejecutando opcode=99
+AC=19, SP=302, Cond=0
+--- Fin de Sesión: Mon Jan 12 21:34:16 2026
+
+
+--- Nueva Sesión del Simulador: Mon Jan 12 21:35:06 2026
+PC=0, Ejecutando opcode=4
+AC=100, SP=300, Cond=0
+PC=1, Ejecutando opcode=0
+AC=150, SP=300, Cond=2
+PC=2, Ejecutando opcode=2
+AC=300, SP=300, Cond=2
+PC=3, Ejecutando opcode=3
+AC=100, SP=300, Cond=2
+PC=4, Ejecutando opcode=1
+AC=80, SP=300, Cond=2
+PC=5, Ejecutando opcode=25
+AC=80, SP=301, Cond=2
+PC=6, Ejecutando opcode=4
+AC=80, SP=301, Cond=2
+PC=7, Ejecutando opcode=8
+AC=80, SP=301, Cond=0
+PC=8, Ejecutando opcode=15
+AC=80, SP=301, Cond=0
+PC=9, Ejecutando opcode=16
+AC=80, SP=301, Cond=0
+PC=10, Ejecutando opcode=17
+AC=80, SP=301, Cond=0
+PC=11, Ejecutando opcode=13
+AC=80, SP=301, Cond=0
+PC=12, Ejecutando opcode=4
+AC=29, SP=301, Cond=0
+PC=13, Ejecutando opcode=5
+AC=29, SP=301, Cond=0
+PC=14, Ejecutando opcode=4
+AC=19, SP=301, Cond=0
+PC=15, Ejecutando opcode=25
+AC=19, SP=302, Cond=0
+PC=16, Ejecutando opcode=9
+AC=19, SP=302, Cond=0
+PC=29, Ejecutando opcode=31
+AC=19, SP=302, Cond=0
+PC=30, Ejecutando opcode=33
+AC=19, SP=302, Cond=0
+PC=31, Ejecutando opcode=99
+AC=19, SP=302, Cond=0
+--- Fin de Sesión: Mon Jan 12 21:37:02 2026
+

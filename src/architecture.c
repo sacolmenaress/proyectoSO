@@ -5,6 +5,8 @@
 
 // Memoria principal
 Word RAM[RAM_SIZE];
+// Disco Virtual
+Word DISK[DISK_SIZE];
 
 // CPU global
 CPU_t cpu;
@@ -110,9 +112,22 @@ int escribirMemoria(int direccion, Word w) {
     cpu.PSW.pc = 0;
     cpu.halted = 0; // Inicializar flag de parada
 
+    // Inicializar DMA
+    cpu.dma.track = 0;
+    cpu.dma.cylinder = 0;
+    cpu.dma.sector = 0;
+    cpu.dma.io_type = 0;
+    cpu.dma.mem_addr = 0;
+
     for (int i = 0; i < RAM_SIZE; i++) {
         RAM[i].sign = 0;
         RAM[i].value = 0;
+    }
+
+    // Inicializar DISCO con ceros
+    for (int i = 0; i < DISK_SIZE; i++) {
+        DISK[i].sign = 0;
+        DISK[i].value = 0;
     }
 }
 
@@ -128,14 +143,12 @@ void fetch() {
 
 
     Word w = cpu.MDR.data;
-    // Convertimos la palabra en 8 dígitos a los campos de IR
-    int valor = obtenerValorReal(w);
-    cpu.IR.opcode      = valor / 1000000;        // 2 dígitos
-    cpu.IR.addressing  = (valor / 100000) % 10;  // 1 dígito
-    cpu.IR.operand     = valor % 100000;         // 5 dígitos
-
-    // DEBUG
-    // printf("DEBUG: PC=%d, Fetched Val=%d, Opcode=%d\n", cpu.PSW.pc, valor, cpu.IR.opcode);
+    // Combinar signo (1 dígito) y magnitud (7 dígitos) para obtener los 8 dígitos totales
+    long long total = (long long)w.sign * 10000000LL + w.value;
+    
+    cpu.IR.opcode      = (int)(total / 1000000);        // 2 dígitos (00-99)
+    cpu.IR.addressing  = (int)((total / 100000) % 10);  // 1 dígito  (0-9)
+    cpu.IR.operand     = (int)(total % 100000);         // 5 dígitos (00000-99999)
 
 }
 
@@ -317,46 +330,87 @@ switch(cpu.IR.opcode) {
 
     case OPC_JMPE: { // 9
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        if(obtenerValorReal(cpu.AC) == obtenerValorReal(RAM[cpu.stack.sp])) 
-            cpu.PSW.pc = cpu.IR.operand;
+        if (cpu.stack.sp > OS_RESERVED) {
+            Word top = RAM[cpu.stack.sp - 1];
+            if (obtenerValorReal(cpu.AC) == obtenerValorReal(top)) {
+                Word target;
+                if (leerMemoria(cpu.IR.operand, &target)) {
+                    cpu.PSW.pc = obtenerValorReal(target) - 1;
+                    printf("DEBUG: JMPE -> Salto indirecto a PC=%d\n", cpu.PSW.pc + 1);
+                }
+            }
+        }
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
 
     case OPC_JMPNE: { // 10
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        if(obtenerValorReal(cpu.AC) != obtenerValorReal(RAM[cpu.stack.sp])) 
-            cpu.PSW.pc = cpu.IR.operand;
+        if (cpu.stack.sp > OS_RESERVED) {
+            Word top = RAM[cpu.stack.sp - 1];
+            if (obtenerValorReal(cpu.AC) != obtenerValorReal(top)) {
+                Word target;
+                if (leerMemoria(cpu.IR.operand, &target)) {
+                    cpu.PSW.pc = obtenerValorReal(target) - 1;
+                    printf("DEBUG: JMPNE -> Salto indirecto a PC=%d\n", cpu.PSW.pc + 1);
+                }
+            }
+        }
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
 
     case OPC_JMPLT: { // 11
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        if(obtenerValorReal(cpu.AC) < obtenerValorReal(RAM[cpu.stack.sp])) 
-            cpu.PSW.pc = cpu.IR.operand;
+        if (cpu.stack.sp > OS_RESERVED) {
+            Word top = RAM[cpu.stack.sp - 1];
+            if (obtenerValorReal(cpu.AC) < obtenerValorReal(top)) {
+                Word target;
+                if (leerMemoria(cpu.IR.operand, &target)) {
+                    cpu.PSW.pc = obtenerValorReal(target) - 1;
+                    printf("DEBUG: JMPLT -> Salto indirecto a PC=%d\n", cpu.PSW.pc + 1);
+                }
+            }
+        }
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
 
     case OPC_JMPLGT: { // 12
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        if(obtenerValorReal(cpu.AC) > obtenerValorReal(RAM[cpu.stack.sp])) 
-            cpu.PSW.pc = cpu.IR.operand;
+        if (cpu.stack.sp > OS_RESERVED) {
+            Word top = RAM[cpu.stack.sp - 1];
+            if (obtenerValorReal(cpu.AC) > obtenerValorReal(top)) {
+                Word target;
+                if (leerMemoria(cpu.IR.operand, &target)) {
+                    cpu.PSW.pc = obtenerValorReal(target) - 1;
+                    printf("DEBUG: JMPLGT -> Salto indirecto a PC=%d\n", cpu.PSW.pc + 1);
+                }
+            }
+        }
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
 
     case OPC_SVC: { // 13
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        printf("Llamada al sistema: código AC=%d\n", obtenerValorReal(cpu.AC));
+        int param = (cpu.stack.sp > OS_RESERVED) ? obtenerValorReal(RAM[cpu.stack.sp - 1]) : 0;
+        printf("Llamada al sistema: código AC=%d, parámetro en stack=%d\n", obtenerValorReal(cpu.AC), param);
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
 
     case OPC_RETRN: { // 14
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        cpu.PSW.pc = cpu.stack.sp;
+        // Retorno: PC = POP()
+        if (cpu.stack.sp > OS_RESERVED) {
+            cpu.AC = RAM[--cpu.stack.sp];
+            cpu.PSW.pc = obtenerValorReal(cpu.AC) - 1; // -1 porque incrementarPC sumará 1
+            printf("DEBUG: RETRN -> PC restaurado a %d\n", cpu.PSW.pc + 1);
+        } else {
+            printf("Error: Stack Underflow en RETRN\n");
+            cpu.halted = 1;
+        }
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
@@ -379,7 +433,7 @@ switch(cpu.IR.opcode) {
 
     case OPC_TTI: { // 17
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        printf("Simulación de temporizador TTI: %d ciclos\n", cpu.IR.operand);
+        printf("Sistema: Temporizador TTI configurado cada %d ciclos\n", cpu.IR.operand);
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
     }
@@ -460,15 +514,68 @@ switch(cpu.IR.opcode) {
     }
 
     case OPC_SDMAP:   // 28
-    case OPC_SDMAC:   // 29
-    case OPC_SDMAS:   // 30
-    case OPC_SDMAIO:  // 31
-    case OPC_SDMAM:   // 32
-    case OPC_SDMAON:  // 33
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-        printf("Instrucción DMA simulada: opcode=%d\n", cpu.IR.opcode);
+        cpu.dma.track = cpu.IR.operand;
+        printf("DMA: Pista configurada a %d\n", cpu.dma.track);
         log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
         break;
+    case OPC_SDMAC:   // 29
+        log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
+        cpu.dma.cylinder = cpu.IR.operand;
+        printf("DMA: Cilindro configurado a %d\n", cpu.dma.cylinder);
+        log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
+        break;
+    case OPC_SDMAS:   // 30
+        log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
+        cpu.dma.sector = cpu.IR.operand;
+        printf("DMA: Sector configurado a %d\n", cpu.dma.sector);
+        log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
+        break;
+    case OPC_SDMAIO:  // 31
+        log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
+        cpu.dma.io_type = cpu.IR.operand;
+        printf("DMA: Modo I/O configurado a %s (%d)\n", 
+            (cpu.dma.io_type == 0) ? "Lectura (Disco->RAM)" : "Escritura (RAM->Disco)", 
+            cpu.dma.io_type);
+        log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
+        break;
+    case OPC_SDMAM:   // 32
+        log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
+        cpu.dma.mem_addr = cpu.IR.operand;
+        printf("DMA: Dirección de memoria RAM configurada a %d\n", cpu.dma.mem_addr);
+        log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
+        break;
+    case OPC_SDMAON: { // 33
+        log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
+        
+        // Calcular dirección lineal en el disco
+        int disk_addr = (cpu.dma.cylinder * DISK_TRACKS * DISK_SECTORS) + 
+                        (cpu.dma.track * DISK_SECTORS) + 
+                        cpu.dma.sector;
+        
+        if (disk_addr >= DISK_SIZE || disk_addr < 0) {
+            printf("Error DMA: Dirección de disco inválida (%d)\n", disk_addr);
+            cpu.halted = 1;
+        } else {
+            // Realizar transferencia siguiendo el modo usuario/kernel
+            if (cpu.dma.io_type == 0) { // Lectura: Disco -> RAM
+                Word data = DISK[disk_addr];
+                if (escribirMemoria(cpu.dma.mem_addr, data)) {
+                    printf("DMA: Transferencia EXITOSA [Disco:%d] -> [RAM:%d] | Valor: %d\n", 
+                        disk_addr, cpu.dma.mem_addr, obtenerValorReal(data));
+                }
+            } else { // Escritura: RAM -> Disco
+                Word data;
+                if (leerMemoria(cpu.dma.mem_addr, &data)) {
+                    DISK[disk_addr] = data;
+                    printf("DMA: Transferencia EXITOSA [RAM:%d] -> [Disco:%d] | Valor: %d\n", 
+                        cpu.dma.mem_addr, disk_addr, obtenerValorReal(data));
+                }
+            }
+        }
+        log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
+        break;
+    }
 
     default: {
         log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);

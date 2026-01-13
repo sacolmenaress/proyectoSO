@@ -8,6 +8,12 @@
 #define RAM_SIZE 2000
 #define OS_RESERVED 300 // 300 direcciones reservadas para el SO
 
+// Geometría del Disco Virtual
+#define DISK_CYLINDERS 10
+#define DISK_TRACKS    5
+#define DISK_SECTORS   20
+#define DISK_SIZE      (DISK_CYLINDERS * DISK_TRACKS * DISK_SECTORS)
+
 #define MODE_KERNEL 1
 #define MODE_USER   0
 
@@ -50,6 +56,16 @@
 #define OPC_SDMAIO   31
 #define OPC_SDMAM    32
 #define OPC_SDMAON   33
+
+
+// Estructura para el controlador DMA
+typedef struct {
+    int track;
+    int cylinder;
+    int sector;
+    int io_type;  // 0 = Lectura (Disco->RAM), 1 = Escritura (RAM->Disco)
+    int mem_addr; // Dirección en RAM
+} DMA_t;
 
 
 //Definimos estructura 
@@ -108,11 +124,14 @@ typedef struct {
     MemoryProtection_t mp; //Registros de protección
     StackRegisters_t stack; //Registros de pila
     PSW_t PSW;         //Registro de estado
+    DMA_t dma;         //Controlador DMA
     int halted;        // Flag para detener la simulación (separado de PSW.interrupt)
 } CPU_t;
 
 // Memoria principal 
 extern Word RAM[RAM_SIZE];
+// Disco Virtual
+extern Word DISK[DISK_SIZE];
 
 // CPU global 
 extern CPU_t cpu;

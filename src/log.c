@@ -6,35 +6,38 @@
 
 
 
-static FILE *log_file = NULL;
+static const char* LOG_FILENAME = "log.txt";
 
 void abrir_log(void) {
-    log_file = fopen("log.txt", "a");  // No borrar contenido previo del log
-    if (log_file == NULL) {
+    FILE *f = fopen(LOG_FILENAME, "a");
+    if (f == NULL) {
         perror("Error abriendo log.txt");
         exit(EXIT_FAILURE);
     }
-    
     time_t ahora;
     time(&ahora);
-    fprintf(log_file, "\nInicio de sesión: %s", ctime(&ahora));
-    fflush(log_file);
+    fprintf(f, "\n--- Nueva Sesión del Simulador: %s", ctime(&ahora));
+    fclose(f);
+    printf("Sistema de log activo (log.txt)\n");
 }
 
 void escribir_log(const char *mensaje) {
-    if (log_file != NULL) {
-        fprintf(log_file, "%s\n", mensaje);
-        fflush(log_file);  
+    FILE *f = fopen(LOG_FILENAME, "a");
+    if (f != NULL) {
+        fprintf(f, "%s\n", mensaje);
+        fclose(f);
+    } else {
+        perror("Fallo en escribir_log al abrir log.txt");
     }
 }
 
 void cerrar_log(void) {
-    if (log_file != NULL) {
+    FILE *f = fopen(LOG_FILENAME, "a");
+    if (f != NULL) {
         time_t ahora;
         time(&ahora);
-        fprintf(log_file, "Fin de sesión: %s\n", ctime(&ahora));
-        fclose(log_file);
-        log_file = NULL;
+        fprintf(f, "--- Fin de Sesión: %s\n", ctime(&ahora));
+        fclose(f);
     }
 }
 
