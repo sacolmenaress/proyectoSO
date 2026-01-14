@@ -1,148 +1,149 @@
 #ifndef ARCHITECTURE_H
 #define ARCHITECTURE_H
 
-
 #include <signal.h>
 
-// Constantes del sistema 
+// Constantes del sistema
 #define RAM_SIZE 2000
 #define OS_RESERVED 300 // 300 direcciones reservadas para el SO
 
 // Geometría del Disco Virtual
 #define DISK_CYLINDERS 10
-#define DISK_TRACKS    5
-#define DISK_SECTORS   20
-#define DISK_SIZE      (DISK_CYLINDERS * DISK_TRACKS * DISK_SECTORS)
+#define DISK_TRACKS 10
+#define DISK_SECTORS 100
+#define DISK_SIZE (DISK_CYLINDERS * DISK_TRACKS * DISK_SECTORS)
 
 #define MODE_KERNEL 1
-#define MODE_USER   0
+#define MODE_USER 0
 
-#define ADDR_DIRECT    0
+#define ADDR_DIRECT 0
 #define ADDR_IMMEDIATE 1
-#define ADDR_INDEXED   2
+#define ADDR_INDEXED 2
 
-//Códigs de operación
-#define OPC_SUM      0
-#define OPC_RES      1
-#define OPC_MULT     2
-#define OPC_DIVI     3
-#define OPC_LOAD     4
-#define OPC_STR      5
-#define OPC_LOADRX   6
-#define OPC_STRRX    7
-#define OPC_COMP     8
-#define OPC_JMPE     9
-#define OPC_JMPNE    10
-#define OPC_JMPLT    11
-#define OPC_JMPLGT   12
-#define OPC_SVC      13
-#define OPC_RETRN    14
-#define OPC_HAB      15
-#define OPC_DHAB     16
-#define OPC_TTI      17
-#define OPC_CHMOD    18
-#define OPC_LOADRB   19
-#define OPC_STRRB    20
-#define OPC_LOADRL   21
-#define OPC_STRRL    22
-#define OPC_LOADSP   23
-#define OPC_STRSP    24
-#define OPC_PSH      25
-#define OPC_POP      26
-#define OPC_J        27
-#define OPC_SDMAP    28
-#define OPC_SDMAC    29
-#define OPC_SDMAS    30
-#define OPC_SDMAIO   31
-#define OPC_SDMAM    32
-#define OPC_SDMAON   33
+// Códigos de operación (Compatibilidad con nombres usados en architecture.c)
+#define OPC_ADD 00 // Antes OPC_SUM
+#define OPC_SUB 01 // Antes OPC_RES
+#define OPC_MUL 02 // Antes OPC_MULT
+#define OPC_DIVI 03
 
+#define OPC_LOAD 04
+#define OPC_STORE 05  // Antes OPC_STR
+#define OPC_MOV_RX 40 // Opcode auxiliar
 
-// Estructura para el controlador DMA
+#define OPC_SVC 13
+#define OPC_RETRN 14
+
+// Comparaciones
+#define OPC_CMPE 15 // Antes OPC_HAB (reutilizado o cambiado)
+#define OPC_CMPL 16 // Antes OPC_DHAB
+#define OPC_CMPG 17 // Antes OPC_TTI
+
+// Saltos
+#define OPC_JEQ 20 // Antes OPC_STRRB
+#define OPC_JNE 21 // Antes OPC_LOADRL
+#define OPC_JL 22  // Antes OPC_STRRL
+#define OPC_JG 23  // Antes OPC_LOADSP
+#define OPC_J 27
+
+// Stack
+#define OPC_POP_AM 24 // POP a memoria
+#define OPC_PSH 25
+#define OPC_POP 26
+
+// DMA
+#define OPC_SDMAP 28
+#define OPC_SDMAC 29
+#define OPC_SDMAS 30
+#define OPC_SDMAIO 31
+#define OPC_SDMAM 32
+#define OPC_SDMAON 33
+
+#define OPC_HALT 99
+
+// Códigos de Interrupción (Punto 13 PDF)
+#define INT_INVALID_SYSCALL 0
+#define INT_INVALID_INT 1
+#define INT_SYSCALL 2
+#define INT_CLOCK 3
+#define INT_IO_COMPLETE 4
+#define INT_INVALID_INST 5
+#define INT_INVALID_ADDR 6
+#define INT_UNDERFLOW 7
+#define INT_OVERFLOW 8
+
+// Tamaño del Vector de Interrupciones
+#define INTERRUPT_VECTOR_SIZE 16
+
+// Estructuras
+
 typedef struct {
-    int track;
-    int cylinder;
-    int sector;
-    int io_type;  // 0 = Lectura (Disco->RAM), 1 = Escritura (RAM->Disco)
-    int mem_addr; // Dirección en RAM
-} DMA_t;
-
-
-//Definimos estructura 
-
-//Palabra de memoria: 1 dígito signo + 7 dígitos magnitud = 8 total
-typedef struct {
-    int sign;          // 0 = positivo, 1 = negativo 
-    int value;        // magnitud (0 – 9999999) - 7 dígitos
+  int sign;
+  int value;
 } Word;
 
-int obtenerValorReal(Word w);
-void asignarValor(Word *w, int resultado);
-
-//Registros de memoria
 typedef struct {
-    int address;       //MAR 
+  int address;
 } MAR_t;
 
 typedef struct {
-    Word data;         //MDR 
+  Word data;
 } MDR_t;
 
-// Registro de instrucción 
 typedef struct {
-    int opcode;        // 2 dígitos 
-    int addressing;   // 1 dígito 
-    int operand;      // 5 dígitos 
+  int opcode;
+  int addressing;
+  int operand;
 } IR_t;
 
-// Registros de protección 
 typedef struct {
-    int base;          // RB 
-    int limit;         // RL 
+  int base;
+  int limit;
 } MemoryProtection_t;
 
-// Registros de pila 
 typedef struct {
-    int rx;            // Índice 
-    int sp;            // Stack Pointer 
+  int rx;
+  int sp;
 } StackRegisters_t;
 
-// PSW: Program Status Word 
 typedef struct {
-    int condition;     // 1 dígito (0-3)
-    int mode;          // 1 dígito (Kernel = 1 / Usuario = 0)
-    int interrupt;     // 1 dígito (Flag de interrupción 0 = no habilitada, 1 = sí habilitada)
-    int pc;            // 5 dígitos Program Counter 
+  int condition;
+  int mode;
+  int interrupt;
+  int pc;
 } PSW_t;
 
-// CPU virtual 
 typedef struct {
-    Word AC;           // Registro Acumulador, ejecución
-    MAR_t MAR;         //Registro de dirección, fetch
-    MDR_t MDR;         //Registro de datos, lectura/escritura
-    IR_t IR;           //Registro de instrucción, decodificación
-    MemoryProtection_t mp; //Registros de protección
-    StackRegisters_t stack; //Registros de pila
-    PSW_t PSW;         //Registro de estado
-    DMA_t dma;         //Controlador DMA
-    int halted;        // Flag para detener la simulación (separado de PSW.interrupt)
+  int track;
+  int cylinder;
+  int sector;
+  int io_type;
+  int mem_addr;
+  int status; // ESTADOdma: 0 = éxito, 1 = error
+} DMA_t;
+
+typedef struct {
+  Word AC;
+  MAR_t MAR;
+  MDR_t MDR;
+  IR_t IR;
+  MemoryProtection_t mp;
+  StackRegisters_t stack;
+  PSW_t PSW;
+  DMA_t dma;
+  int halted;
 } CPU_t;
 
-// Memoria principal 
-extern Word RAM[RAM_SIZE];
-// Disco Virtual
-extern Word DISK[DISK_SIZE];
-
-// CPU global 
+// Variables Globales
 extern CPU_t cpu;
+extern Word RAM[RAM_SIZE];
+extern Word DISK[DISK_SIZE];
+extern int vectorInterrupciones[INTERRUPT_VECTOR_SIZE];
 
-// Funciones de ejecución
-void fetch();
-void decodeExecute();
+// Prototipos
 void inicializarCPU(void);
-void ejecutarInst(void);  
+void inicializarMemoria(void);
+void ejecutarInst(void);
 int obtenerOperando(int *ok);
-
-
+int obtenerValorReal(Word w);
 
 #endif
