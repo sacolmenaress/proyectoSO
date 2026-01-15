@@ -1,0 +1,4 @@
+.NombreProg MiPrueba
+04100010
+...
+
