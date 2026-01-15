@@ -1,0 +1,5 @@
+.NombreProg TestHalt
+.NumeroPalabras 2
+_start 0
+4100005
+99000000

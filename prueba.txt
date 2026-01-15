@@ -1,0 +1,4 @@
+.NombreProg PruebaInfinito
+.NumeroPalabras 1
+_start 0
+041000005
