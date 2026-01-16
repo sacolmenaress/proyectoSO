@@ -1,6 +1,5 @@
 # Binarios y objetos
 *.exe
-*.o
 
 # Archivos de log
 log.txt

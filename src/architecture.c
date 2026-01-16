@@ -165,11 +165,7 @@ void fetch() {
   Word instruccionCodificada = RAM[cpu.PSW.pc];
   int valorInstruccion = instruccionCodificada.value;
 
-<<<<<<< HEAD
   int op1 = instruccionCodificada.sign;
-=======
-  int op1 = (instruccionCodificada.sign == 1) ? 1 : 0;
->>>>>>> 8059dff497fb2d4ab313849e31806db0a7c515ba
   int op2 = valorInstruccion / 1000000; // Primer digito de magnitud
 
   // Opcode real de 2 dígitos
