@@ -29,22 +29,66 @@ void asignarValor(Word *w, int resultado) {
   }
 }
 
-// Función auxiliar para lanzar interrupciones
+// Tabla de descripciones de interrupciones (Requisito 3)
+static const char *INT_DESCRIPTIONS[] = {
+    "Código de llamada al sistema inválido", // 0
+    "Código de interrupción inválido",       // 1
+    "Llamada al sistema",                     // 2
+    "Reloj",                                  // 3
+    "Finalización de E/S",                    // 4
+    "Instrucción inválida",                   // 5
+    "Direccionamiento inválido",              // 6
+    "Underflow",                              // 7
+    "Overflow"                                // 8
+};
+
+/**
+ * @brief Lanza una interrupción y maneja su procesamiento
+ * @param codigo Código de interrupción (0-8)
+ * 
+ * Requisito 3: Imprime mensaje en salida estándar Y en log
+ * Requisito 13: Salvaguarda registros y salta al manejador
+ */
 void lanzarInterrupcion(int codigo) {
   if (codigo < 0 || codigo >= INTERRUPT_VECTOR_SIZE) {
     lanzarInterrupcion(INT_INVALID_INT);
     return;
   }
 
-  printf("\n*** INTERRUPCIÓN: Código %d ***\n", codigo);
-  // Simulación simplificada: solo reportar y detener si es grave
-  // En Fase II, aquí se saltaría al manejador (PC = vector[codigo])
+  // Requisito 3: Mensaje con código y descripción
+  char mensaje[256];
+  snprintf(mensaje, sizeof(mensaje), "INTERRUPCIÓN: Código %d - %s", codigo,
+           INT_DESCRIPTIONS[codigo]);
 
-  // Lista de códigos fatales que detienen la máquina en Fase I
-  if (codigo == INT_INVALID_ADDR || codigo == INT_INVALID_INST ||
-      codigo == INT_INVALID_INT) {
-    printf("Error crítico. Deteniendo CPU.\n");
-    cpu.halted = 1;
+  // Requisito 3: Salida estándar
+  printf("\n*** %s ***\n", mensaje);
+
+  // Requisito 3: Log
+  escribir_log(mensaje);
+
+  // ITEM 13: Salvaguardar TODOS los registros antes del manejador
+  cpu.interrupt_context.AC = cpu.AC;
+  cpu.interrupt_context.PC = cpu.PSW.pc;
+  cpu.interrupt_context.SP = cpu.stack.sp;
+  cpu.interrupt_context.PSW = cpu.PSW;
+  cpu.interrupt_context.IR = cpu.IR;
+  cpu.interrupt_context.MAR = cpu.MAR;
+  cpu.interrupt_context.MDR = cpu.MDR;
+
+  // Indexar vector con código de interrupción y saltar al manejador
+  int handler = vectorInterrupciones[codigo];
+  if (handler != 0) {
+    printf("Saltando al manejador en dirección %d\n", handler);
+    cpu.PSW.pc = handler;
+    cpu.PSW.mode = MODE_KERNEL; // Entra en modo privilegiado
+  } else {
+    // Si no hay manejador configurado, reportar y detener si es fatal
+    printf("No hay manejador configurado para esta interrupción.\n");
+    if (codigo == INT_INVALID_ADDR || codigo == INT_INVALID_INST ||
+        codigo == INT_INVALID_INT) {
+      printf("Error crítico. Deteniendo CPU.\n");
+      cpu.halted = 1;
+    }
   }
 }
 
@@ -65,49 +109,87 @@ void incrementarPC() {
   }
 }
 
-// Lectura de memoria con protección
+/**
+ * @brief Lee una palabra de memoria con protección y arbitraje de bus
+ * @param direccion Dirección ABSOLUTA en memoria física
+ * @param w Puntero donde se almacenará la palabra leída
+ * @return 1 si éxito, 0 si error (genera interrupción)
+ * 
+ * NOTA: Los programas usan direcciones ABSOLUTAS (ej: 300, 404)
+ * NO se suma RB, solo se valida que estén dentro del rango [RB, RL]
+ * 
+ * Requisito 5: Implementa arbitraje de bus (cpu.bus_locked)
+ * Requisito 7: Previene condiciones de competencia CPU/DMA
+ * Item 11: Protección de memoria con RB/RL en modo USER
+ */
 int leerMemoria(int direccion, Word *w) {
-  int dirReal =
-      (cpu.PSW.mode == MODE_KERNEL) ? direccion : direccion + cpu.mp.base;
+  // ARBITRAJE DE BUS (Item 10): Bloquear bus durante acceso
+  cpu.bus_locked = 1;
+
+  // Direcciones son ABSOLUTAS (no se suma RB)
+  int dirReal = direccion;
 
   // "En modo privilegiado se omite esta comprobación" (Punto 11 PDF)
   if (cpu.PSW.mode == MODE_USER) {
+    // Validar que la dirección esté dentro del rango del proceso [RB, RL]
     if (dirReal < cpu.mp.base || dirReal > cpu.mp.limit) {
+      cpu.bus_locked = 0; // Liberar bus antes de salir
       lanzarInterrupcion(INT_INVALID_ADDR);
       return 0;
     }
   } else {
     // En modo Kernel, validamos solo límites físicos de la RAM
     if (dirReal < 0 || dirReal >= RAM_SIZE) {
+      cpu.bus_locked = 0; // Liberar bus antes de salir
       lanzarInterrupcion(INT_INVALID_ADDR);
       return 0;
     }
   }
 
   *w = RAM[dirReal];
+  cpu.bus_locked = 0; // Liberar bus después del acceso
   return 1;
 }
 
-// Escritura en memoria con protección
+/**
+ * @brief Escribe una palabra en memoria con protección y arbitraje de bus
+ * @param direccion Dirección ABSOLUTA en memoria física
+ * @param w Palabra a escribir
+ * @return 1 si éxito, 0 si error (genera interrupción)
+ * 
+ * NOTA: Los programas usan direcciones ABSOLUTAS (ej: 300, 404)
+ * NO se suma RB, solo se valida que estén dentro del rango [RB, RL]
+ * 
+ * Requisito 5: Implementa arbitraje de bus (cpu.bus_locked)
+ * Requisito 7: Previene condiciones de competencia CPU/DMA
+ * Item 11: Protección de memoria con RB/RL en modo USER
+ */
 int escribirMemoria(int direccion, Word w) {
-  int dirReal =
-      (cpu.PSW.mode == MODE_KERNEL) ? direccion : direccion + cpu.mp.base;
+  // ARBITRAJE DE BUS (Item 10): Bloquear bus durante acceso
+  cpu.bus_locked = 1;
+
+  // Direcciones son ABSOLUTAS (no se suma RB)
+  int dirReal = direccion;
 
   // "En modo privilegiado se omite esta comprobación" (Punto 11 PDF)
   if (cpu.PSW.mode == MODE_USER) {
+    // Validar que la dirección esté dentro del rango del proceso [RB, RL]
     if (dirReal < cpu.mp.base || dirReal > cpu.mp.limit) {
+      cpu.bus_locked = 0; // Liberar bus antes de salir
       lanzarInterrupcion(INT_INVALID_ADDR);
       return 0;
     }
   } else {
     // En modo Kernel, validamos solo límites físicos de la RAM
     if (dirReal < 0 || dirReal >= RAM_SIZE) {
+      cpu.bus_locked = 0; // Liberar bus antes de salir
       lanzarInterrupcion(INT_INVALID_ADDR);
       return 0;
     }
   }
 
   RAM[dirReal] = w;
+  cpu.bus_locked = 0; // Liberar bus después del acceso
   return 1;
 }
 
@@ -144,6 +226,11 @@ void inicializarCPU() {
   cpu.PSW.interrupt = 0;
   cpu.PSW.pc = 0;
   cpu.halted = 0; // Inicializar flag de parada
+  cpu.bus_locked = 0; // Bus inicialmente libre (Item 10)
+
+  // Inicializar protección de memoria (Item 11)
+  cpu.mp.base = 0;
+  cpu.mp.limit = 0;
 
   // Inicializar DMA
   cpu.dma.track = 0;
@@ -158,6 +245,14 @@ void inicializarCPU() {
   inicializarVectorInterrupciones();
 }
 
+/**
+ * @brief Fase FETCH del ciclo de instrucción
+ * 
+ * Requisito 4: Implementa fase de búsqueda usando PC, MAR, MDR, IR
+ * 1. Lee instrucción de RAM[PC]
+ * 2. Decodifica en IR (opcode, addressing, operand)
+ * 3. Incrementa PC
+ */
 void fetch() {
   if (!validarPC(cpu.PSW.pc))
     return;
@@ -218,6 +313,13 @@ void actualizarCodCond(long long resultado) {
   }
 }
 
+/**
+ * @brief Fase EXECUTE del ciclo de instrucción
+ * 
+ * Requisito 4: Implementa fase de ejecución
+ * Decodifica opcode del IR y ejecuta la instrucción correspondiente
+ * Requisito 8: Respeta códigos de operación y formato de arquitectura
+ */
 void decodeExecute() {
   switch (cpu.IR.opcode) {
   case OPC_LOAD: { // 04
@@ -341,6 +443,61 @@ void decodeExecute() {
     break;
   }
 
+  // Instrucciones para manipular RB/RL (Item 11)
+  case OPC_LOADRB: { // 18 - Cargar RB desde memoria
+    log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
+    int ok;
+    int valor = obtenerOperando(&ok);
+    if (ok) {
+      cpu.mp.base = valor;
+      printf("RB cargado: %d\n", cpu.mp.base);
+    }
+    log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
+    break;
+  }
+
+  case OPC_STRRB: { // 19 - Guardar RB en memoria
+    log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
+    int dirDestino = 0;
+    if (cpu.IR.addressing == ADDR_DIRECT) {
+      dirDestino = cpu.IR.operand;
+    } else if (cpu.IR.addressing == ADDR_INDEXED) {
+      dirDestino = cpu.IR.operand + cpu.stack.rx;
+    }
+    Word valor;
+    asignarValor(&valor, cpu.mp.base);
+    escribirMemoria(dirDestino, valor);
+    log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
+    break;
+  }
+
+  case OPC_LOADRL: { // 35 - Cargar RL desde memoria
+    log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
+    int ok;
+    int valor = obtenerOperando(&ok);
+    if (ok) {
+      cpu.mp.limit = valor;
+      printf("RL cargado: %d\n", cpu.mp.limit);
+    }
+    log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
+    break;
+  }
+
+  case OPC_STRRL: { // 36 - Guardar RL en memoria
+    log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
+    int dirDestino = 0;
+    if (cpu.IR.addressing == ADDR_DIRECT) {
+      dirDestino = cpu.IR.operand;
+    } else if (cpu.IR.addressing == ADDR_INDEXED) {
+      dirDestino = cpu.IR.operand + cpu.stack.rx;
+    }
+    Word valor;
+    asignarValor(&valor, cpu.mp.limit);
+    escribirMemoria(dirDestino, valor);
+    log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
+    break;
+  }
+
   case OPC_CMPG: { // 17
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     int ok;
@@ -413,15 +570,19 @@ void decodeExecute() {
     break;
   }
 
-  case OPC_RETRN: { // 14
+  case OPC_RETRN: { // 14 - Return from interrupt
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-    if (cpu.stack.sp > OS_RESERVED) {
-      cpu.AC = RAM[--cpu.stack.sp];
-      cpu.PSW.pc =
-          obtenerValorReal(cpu.AC) - 1; // -1 porque incrementarPC sumará 1
-    } else {
-      lanzarInterrupcion(INT_UNDERFLOW);
-    }
+    
+    // ITEM 13: Restaurar TODOS los registros salvados
+    printf("Restaurando contexto de interrupción...\n");
+    cpu.AC = cpu.interrupt_context.AC;
+    cpu.PSW.pc = cpu.interrupt_context.PC;
+    cpu.stack.sp = cpu.interrupt_context.SP;
+    cpu.PSW = cpu.interrupt_context.PSW;
+    cpu.IR = cpu.interrupt_context.IR;
+    cpu.MAR = cpu.interrupt_context.MAR;
+    cpu.MDR = cpu.interrupt_context.MDR;
+    
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
     break;
   }
@@ -510,11 +671,12 @@ void decodeExecute() {
           cpu.dma.status = 1;
         }
       }
-
-      if (cpu.dma.status == 0) {
-        lanzarInterrupcion(INT_IO_COMPLETE);
-      }
     }
+
+    // Item 12: "Luego, interrumpe al procesador" - siempre interrumpe
+    // independientemente del resultado (éxito o error)
+    lanzarInterrupcion(INT_IO_COMPLETE);
+
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
     break;
   }

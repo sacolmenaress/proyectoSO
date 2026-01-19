@@ -38,12 +38,18 @@
 #define OPC_CMPL 16 // Antes OPC_DHAB
 #define OPC_CMPG 17 // Antes OPC_TTI
 
+// Instrucciones para manipular RB/RL (Item 11)
+#define OPC_LOADRB 18  // Cargar RB desde memoria
+#define OPC_STRRB 19   // Guardar RB en memoria
+#define OPC_LOADRL 35  // Cargar RL desde memoria
+#define OPC_STRRL 36   // Guardar RL en memoria
+
 // Saltos
-#define OPC_JEQ 20 // Antes OPC_STRRB
-#define OPC_JNE 21 // Antes OPC_LOADRL
-#define OPC_JL 22  // Antes OPC_STRRL
-#define OPC_JG 23  // Antes OPC_LOADSP
-#define OPC_J 27
+#define OPC_JEQ 20 // Jump if equal
+#define OPC_JNE 21 // Jump if not equal
+#define OPC_JL 22  // Jump if less
+#define OPC_JG 23  // Jump if greater
+#define OPC_J 27   // Jump unconditional
 
 // Stack
 #define OPC_POP_AM 24 // POP a memoria
@@ -121,6 +127,17 @@ typedef struct {
   int status; // ESTADOdma: 0 = éxito, 1 = error
 } DMA_t;
 
+// Estructura para salvaguardar contexto en interrupciones (Item 13)
+typedef struct {
+  Word AC;
+  int PC;
+  int SP;
+  PSW_t PSW;
+  IR_t IR;
+  MAR_t MAR;
+  MDR_t MDR;
+} InterruptContext_t;
+
 typedef struct {
   Word AC;
   MAR_t MAR;
@@ -131,6 +148,8 @@ typedef struct {
   PSW_t PSW;
   DMA_t dma;
   int halted;
+  int bus_locked; // Arbitraje de bus: 0=libre, 1=ocupado (Item 10)
+  InterruptContext_t interrupt_context; // Contexto salvado (Item 13)
 } CPU_t;
 
 // Variables Globales
