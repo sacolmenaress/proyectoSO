@@ -1,6 +1,5 @@
 # Binarios y objetos
 *.exe
-*.o
 
 # Archivos de log
 log.txt
@@ -8,5 +7,5 @@ log.txt
 # VS Code settings
 .vscode/
 
-# Carpeta de pruebas
-Test/
+.pdf 
+
