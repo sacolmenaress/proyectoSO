@@ -1,0 +1,10 @@
+_start 0
+.NumeroPalabras 7
+.NombreProg test_jump
+04101234
+15101234
+20000305
+04100000
+27000306
+04100001
+99000000
