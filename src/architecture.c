@@ -114,7 +114,7 @@ void lanzarInterrupcion(int codigo) {
 
   if (handler != 0) {
     printf("Saltando al manejador en dirección %d\n", handler);
-    cpu.PSW.pc = handler - 1;  // -1 porque PC se incrementa tras fetch
+    cpu.PSW.pc = handler;  // Siguiente fetch leerá el manejador
   } else {
     printf("No hay manejador configurado para esta interrupción.\n");
     if (codigo == INT_INVALID_ADDR || codigo == INT_INVALID_INST ||
@@ -584,7 +584,7 @@ void decodeExecute() {
         int target = cpu.IR.operand;
         if (cpu.IR.addressing == ADDR_INDEXED)
           target += cpu.stack.rx;
-        cpu.PSW.pc = target - 1;
+        cpu.PSW.pc = target;
       }
     }
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
@@ -601,7 +601,7 @@ void decodeExecute() {
         int target = cpu.IR.operand;
         if (cpu.IR.addressing == ADDR_INDEXED)
           target += cpu.stack.rx;
-        cpu.PSW.pc = target - 1;
+        cpu.PSW.pc = target;
       }
     }
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
@@ -618,7 +618,7 @@ void decodeExecute() {
         int target = cpu.IR.operand;
         if (cpu.IR.addressing == ADDR_INDEXED)
           target += cpu.stack.rx;
-        cpu.PSW.pc = target - 1;
+        cpu.PSW.pc = target;
       }
     }
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
@@ -635,7 +635,7 @@ void decodeExecute() {
         int target = cpu.IR.operand;
         if (cpu.IR.addressing == ADDR_INDEXED)
           target += cpu.stack.rx;
-        cpu.PSW.pc = target - 1;
+        cpu.PSW.pc = target;
       }
     }
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
@@ -819,14 +819,20 @@ void decodeExecute() {
 
   case OPC_PSH: { // 25 - Push AC a la pila
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-    RAM[cpu.stack.sp++] = cpu.AC;
+    // Crece hacia abajo: decrementamos primero
+    cpu.stack.sp--;
+    if (!escribirMemoria(cpu.stack.sp, cpu.AC)) {
+        cpu.stack.sp++; // Rollback
+    }
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
     break;
   }
 
   case OPC_POP: { // 26 - Pop de la pila a AC
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-    cpu.AC = RAM[--cpu.stack.sp];
+    if (leerMemoria(cpu.stack.sp, &cpu.AC)) {
+        cpu.stack.sp++; // Decrece el tamaño: incrementamos SP
+    }
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
     break;
   }
@@ -841,7 +847,7 @@ void decodeExecute() {
     if (cpu.IR.addressing == ADDR_INDEXED) {
       target = obtenerValorReal(cpu.AC) + cpu.IR.operand;
     }
-    cpu.PSW.pc = target - 1;
+    cpu.PSW.pc = target;
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
     break;
   }

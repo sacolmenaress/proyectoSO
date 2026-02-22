@@ -2,10 +2,11 @@
 Galavis/
 Paccaneglla/
 bin/ 
-Casos de prueba - Corrección/
+CasosPrueba/
 
 *.exe
 *.o
 arquitectura_virtual
 
-Log.txt
+log.txt
+.vscode/

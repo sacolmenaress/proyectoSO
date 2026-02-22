@@ -277,7 +277,7 @@ int process_create(const char *filename, const char *name) {
         p->ctx.pc        = entry_point;
         p->ctx.rb        = p->base;
         p->ctx.rl        = p->limit;
-        p->ctx.sp        = PARTITION_SIZE - 1; /* relativo al inicio de partición */
+        p->ctx.sp        = PARTITION_SIZE; /* relativo al inicio de partición, primer psh irá a size-1 */
         p->ctx.ac_sign   = 0;
         p->ctx.ac_value  = 0;
         p->ctx.rx        = 0;

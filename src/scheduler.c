@@ -21,13 +21,13 @@
 /* ============================================================
  * dispatch — Despacha un proceso: carga su contexto en la CPU
  * ============================================================ */
-static void dispatch(int new_pid) {
+static void dispatch(int old_pid, int new_pid) {
     /* 1. Si había un proceso corriendo, guardar su contexto */
-    if (current_pid != -1 &&
-        process_table[current_pid].state == STATE_RUNNING) {
-        process_save_context(current_pid);
-        process_change_state(current_pid, STATE_READY);
-        process_table[current_pid].quantum_counter = 0;
+    if (old_pid != -1 &&
+        process_table[old_pid].state == STATE_RUNNING) {
+        process_save_context(old_pid);
+        process_change_state(old_pid, STATE_READY);
+        process_table[old_pid].quantum_counter = 0;
     }
 
     /* 2. Cargar contexto del nuevo proceso */
@@ -38,13 +38,10 @@ static void dispatch(int new_pid) {
 
     char msg[256];
     snprintf(msg, sizeof(msg),
-             "SCHEDULER: dispatch -> PID=%d (%s) | base=%d limit=%d pc=%d",
-             new_pid,
-             process_table[new_pid].name,
-             process_table[new_pid].base,
-             process_table[new_pid].limit,
-             process_table[new_pid].ctx.pc);
+             "[LOG] Quantum agotado. Proceso saliente: %d, Proceso entrante: %d",
+             old_pid, new_pid);
     escribir_log(msg);
+
     printf("[SCHEDULER] Despachando PID=%d (%s)\n",
            new_pid, process_table[new_pid].name);
 }
@@ -143,10 +140,15 @@ int scheduler_tick(void) {
         if (process_table[current_pid].quantum_counter >= PROCESS_QUANTUM) {
             int next = scheduler_next_ready();
             if (next != -1) {
-                /* Hay otro proceso listo: cambio de contexto */
-                dispatch(next);
+                /* Hay otro proceso listo: cambio de contexto. logging está en dispatch */
+                dispatch(current_pid, next);
             } else {
                 /* No hay otro: el mismo sigue (reset del contador) */
+                char log_msg[256];
+                snprintf(log_msg, sizeof(log_msg),
+                        "[LOG] Quantum agotado. Proceso saliente: %d, Proceso entrante: %d",
+                        current_pid, current_pid);
+                escribir_log(log_msg);
                 process_table[current_pid].quantum_counter = 0;
             }
         }
@@ -157,7 +159,7 @@ int scheduler_tick(void) {
     /* Paso 4: No hay nadie RUNNING → buscar siguiente READY */
     int next = scheduler_next_ready();
     if (next != -1) {
-        dispatch(next);
+        dispatch(-1, next);
         return 1;
     }
 
@@ -177,11 +179,11 @@ void scheduler_handle_terminate(void) {
 
     char msg[128];
     snprintf(msg, sizeof(msg),
-             "SCHEDULER: PID=%d (%s) TERMINADO. Partición liberada.",
-             current_pid, process_table[current_pid].name);
+            "SCHEDULER: PID=%d (%s) TERMINADO. Partición liberada.",
+            current_pid, process_table[current_pid].name);
     escribir_log(msg);
     printf("[SCHEDULER] PID=%d (%s) terminó.\n",
-           current_pid, process_table[current_pid].name);
+            current_pid, process_table[current_pid].name);
 
     current_pid = -1;
 }
