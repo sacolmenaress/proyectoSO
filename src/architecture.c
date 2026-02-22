@@ -875,15 +875,31 @@ void decodeExecute() {
     cpu.dma.mem_addr = cpu.IR.operand;
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
     break;
-  case OPC_SDMAON: { // 33 - Iniciar transferencia DMA
+  case OPC_SDMAON: { // 33
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-    
-    pthread_mutex_lock(&bus_mutex);
-    cpu.dma.pending = 1;
-    pthread_cond_signal(&dma_cond);
-    pthread_mutex_unlock(&bus_mutex);
-    
-    printf("DMA: Transferencia iniciada asincronicamente.\n");
+    int disk_addr = (cpu.dma.cylinder * DISK_TRACKS * DISK_SECTORS) +
+                    (cpu.dma.track * DISK_SECTORS) + cpu.dma.sector;
+    if (disk_addr >= DISK_SIZE || disk_addr < 0) {
+      cpu.dma.status = 1;
+    } else {
+      if (cpu.dma.io_type == 0) {
+        Word data = DISK[disk_addr];
+        if (escribirMemoria(cpu.dma.mem_addr, data)) {
+          cpu.dma.status = 0;
+        } else {
+          cpu.dma.status = 1;
+        }
+      } else {
+        Word data;
+        if (leerMemoria(cpu.dma.mem_addr, &data)) {
+          DISK[disk_addr] = data;
+          cpu.dma.status = 0;
+        } else {
+          cpu.dma.status = 1;
+        }
+      }
+    }
+    lanzarInterrupcion(INT_IO_COMPLETE);
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
     break;
   }

@@ -2023,3 +2023,35 @@ PC=1000, Ejecutando opcode=0
 AC=0, SP=300, Cond=0
 --- Fin de Sesión: Sun Jan 18 22:34:24 2026
 
+
+--- Nueva Sesión del Simulador: Sun Feb 22 14:07:41 2026
+KERNEL: Tabla de procesos inicializada (max=20 procesos).
+PROCESO [PID=0] (caso1): TERMINADO --> NUEVO  (tick=0)
+KERNEL: Proceso creado. PID=0, Nombre='caso1', Disco offset=0, Palabras=7, EntryPoint=0.
+KERNEL: PID=0 (caso1) cargado en RAM[300..306] desde DISK[0].
+PROCESO [PID=0] (caso1): NUEVO --> LISTO  (tick=0)
+PROCESO [PID=0] (caso1): LISTO --> EN EJECUCION  (tick=1)
+SCHEDULER: dispatch -> PID=0 (caso1) | base=300 limit=639 pc=0
+PC=1, Ejecutando opcode=4
+AC=10, SP=339, Cond=0
+PC=2, Ejecutando opcode=0
+AC=30, SP=339, Cond=2
+PC=3, Ejecutando opcode=2
+AC=60, SP=339, Cond=2
+PC=4, Ejecutando opcode=3
+AC=12, SP=339, Cond=2
+PC=5, Ejecutando opcode=1
+AC=10, SP=339, Cond=2
+PC=6, Ejecutando opcode=5
+AC=10, SP=339, Cond=2
+PC=7, Ejecutando opcode=13
+INTERRUPCIÓN: Código 2 - Llamada al sistema
+AC=10, SP=339, Cond=2
+PC=20, Ejecutando opcode=0
+AC=30, SP=339, Cond=2
+PC=21, Ejecutando opcode=14
+AC=10, SP=339, Cond=2
+PROCESO [PID=0] (caso1): EN EJECUCION --> TERMINADO  (tick=10)
+SCHEDULER: PID=0 (caso1) TERMINADO. Partición liberada.
+--- Fin de Sesión: Sun Feb 22 14:33:26 2026
+

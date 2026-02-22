@@ -6,10 +6,12 @@ CFLAGS = -Wall -Wextra -g -I./include -pthread
 TARGET = arquitectura_virtual
 
 
-SRCS = src/architecture.c src/main.c src/log.c src/cpu.c src/dma.c
+SRCS = src/architecture.c src/main.c src/log.c src/cpu.c src/dma.c \
+       src/process.c src/scheduler.c
 
 # Archivos objeto 
-OBJS = src/architecture.o src/main.o src/log.o src/cpu.o src/dma.o
+OBJS = src/architecture.o src/main.o src/log.o src/cpu.o src/dma.o \
+       src/process.o src/scheduler.o
 
 #compilar todo el proyecto
 all: $(TARGET)
@@ -33,6 +35,18 @@ src/log.o: src/log.c
 # Compilar cpu.c
 src/cpu.o: src/cpu.c
 	$(CC) $(CFLAGS) -c src/cpu.c -o src/cpu.o
+
+# Compilar dma.c
+src/dma.o: src/dma.c
+	$(CC) $(CFLAGS) -c src/dma.c -o src/dma.o
+
+# Compilar process.c (Fase 2)
+src/process.o: src/process.c
+	$(CC) $(CFLAGS) -c src/process.c -o src/process.o
+
+# Compilar scheduler.c (Fase 2)
+src/scheduler.o: src/scheduler.c
+	$(CC) $(CFLAGS) -c src/scheduler.c -o src/scheduler.o
 
 # Limpiar archivos objeto y ejecutable
 clean:

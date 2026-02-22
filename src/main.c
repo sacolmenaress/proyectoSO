@@ -1,5 +1,7 @@
 #include "architecture.h"
 #include "log.h"
+#include "process.h"    /* Fase 2: gestión de procesos */
+#include "scheduler.h"  /* Fase 2: planificador Round-Robin */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,10 +9,11 @@
 // Función para mostrar comandos
 void command_help() {
   printf("Comandos disponibles:\n");
-  printf("  load <archivo>       : Cargar un programa en memoria\n");
+  printf("  load <archivo>       : Cargar un programa (crea proceso)\n");
+  printf("  ps                   : Ver tabla de procesos\n");
   printf("  mem <inicio> <cant>  : Ver contenido de memoria\n");
   printf("  reg                  : Ver registros del CPU\n");
-  printf("  run                  : Ejecutar el programa hasta finalizar\n");
+  printf("  run                  : Ejecutar con planificador Round-Robin\n");
   printf("  step                 : Ejecutar una instruccion (paso a paso)\n");
   printf("  reset                : Reiniciar CPU y Memoria\n");
   printf("  setvec <cod> <dir>   : Configurar vector de interrupciones\n");
@@ -18,7 +21,29 @@ void command_help() {
 }
 
 // Función para cargar programa desde archivo
+// Fase 2: ahora crea un proceso (PCB) en la tabla de procesos
 void command_load(const char *filename) {
+  /* --- Fase 2: Crear proceso via subsistema de procesos --- */
+  /* Extraer nombre base del archivo para usarlo como nombre del proceso */
+  char procname[64];
+  const char *slash = filename;
+  for (const char *p = filename; *p; p++)
+    if (*p == '/' || *p == '\\') slash = p + 1;
+  strncpy(procname, slash, 63);
+  procname[63] = '\0';
+  /* Quitar extension .txt si existe */
+  char *dot = strrchr(procname, '.');
+  if (dot) *dot = '\0';
+
+  int pid = process_create(filename, procname);
+  if (pid == -1) {
+    printf("Error: No se pudo crear el proceso para '%s'.\n", filename);
+    return;
+  }
+
+  /* --- Compatibilidad Fase 1: también carga directamente en RAM ---
+   * Así los comandos 'step' y 'run' tradicionales siguen funcionando
+   * cuando no se usa el scheduler. */
   FILE *file = fopen(filename, "r");
   if (!file) {
     printf("Error: No se pudo abrir el archivo '%s'.\n", filename);
@@ -210,28 +235,116 @@ void command_step() {
 }
 
 void command_run() {
-  printf("Ejecutando programa...\n");
-  // Ejecutar hasta que se encuentre una condición de parada o error?
-  // Por ahora, pondremos un límite de seguridad o hasta interrupción.
-  int max_cycles = 1000;
-  int cycles = 0;
-  while (cycles < max_cycles) {
-    if (cpu.halted) {
-      printf("Ejecucion detenida por instruccion Halt o error.\n");
+  /* === Fase 2: Ejecutar con planificador Round-Robin ===
+   * Si hay procesos en la tabla, usamos el scheduler.
+   * Si no hay ninguno, caemos al modo Fase 1 (compatibilidad). */
+
+  /* Verificar si hay algún proceso activo (NEW, READY, RUNNING, SLEEPING) */
+  int hay_procesos = 0;
+  for (int i = 0; i < MAX_PROCESSES; i++) {
+    if (process_table[i].pid != -1 &&
+        process_table[i].state != STATE_TERMINATED) {
+      hay_procesos = 1;
       break;
     }
-    if (cpu.PSW.mode == MODE_USER && cpu.PSW.pc >= cpu.stack.rx) {
-      printf("Fin del programa alcanzado (PC=%d).\n", cpu.PSW.pc);
-      break;
+  }
+
+  if (hay_procesos) {
+    /* --- Modo Fase 2: planificador Round-Robin --- */
+    printf("Ejecutando con planificador Round-Robin (quantum=%d)...\n",
+           PROCESS_QUANTUM);
+    int max_cycles = 100000; /* límite de seguridad */
+    int cycles = 0;
+    int idle_count = 0;
+
+    while (cycles < max_cycles) {
+      /* El scheduler decide qué proceso corre (o si hay idle) */
+      int hay_running = scheduler_tick();
+
+      if (!hay_running) {
+        /* No hay proceso listo: verificar si quedan procesos activos */
+        int quedan = 0;
+        for (int i = 0; i < MAX_PROCESSES; i++) {
+          if (process_table[i].pid != -1 &&
+              (process_table[i].state == STATE_READY ||
+               process_table[i].state == STATE_RUNNING ||
+               process_table[i].state == STATE_SLEEPING ||
+               process_table[i].state == STATE_NEW)) {
+            quedan = 1;
+            break;
+          }
+        }
+        if (!quedan) {
+          printf(">> Todos los procesos terminaron.\n");
+          break;
+        }
+        /* Hay procesos SLEEPING: esperar (contar idle para evitar busy-wait infinito) */
+        idle_count++;
+        if (idle_count > 1000) {
+          printf(">> Sistema idle por mucho tiempo. Abortando.\n");
+          break;
+        }
+        cycles++;
+        continue;
+      }
+      idle_count = 0;
+
+      /* Hay un proceso RUNNING: ejecutar UNA instrucción */
+      if (cpu.halted) {
+        printf(">> CPU detenida. PID=%d terminó por HALT.\n", current_pid);
+        scheduler_handle_terminate();
+        cycles++;
+        continue;
+      }
+
+      /* Verificar fin de programa: PC fuera del rango cargado */
+      if (cpu.PSW.mode == MODE_USER &&
+          current_pid != -1 &&
+          cpu.PSW.pc >= process_table[current_pid].prog_size) {
+        printf(">> PID=%d (%s): fin de programa (PC=%d).\n",
+               current_pid,
+               process_table[current_pid].name,
+               cpu.PSW.pc);
+        scheduler_handle_terminate();
+        cycles++;
+        continue;
+      }
+
+      ejecutarInst();
+      cycles++;
     }
-    ejecutarInst();
-    cycles++;
+
+    if (cycles >= max_cycles)
+      printf("Ejecucion detenida: limite de ciclos (%d) alcanzado.\n", max_cycles);
+
+  } else {
+    /* --- Modo Fase 1 (compatibilidad): sin procesos en tabla --- */
+    printf("Ejecutando programa (modo directo)...\n");
+    int max_cycles = 1000;
+    int cycles = 0;
+    while (cycles < max_cycles) {
+      if (cpu.halted) {
+        printf("Ejecucion detenida por instruccion Halt o error.\n");
+        break;
+      }
+      if (cpu.PSW.mode == MODE_USER && cpu.PSW.pc >= cpu.stack.rx) {
+        printf("Fin del programa alcanzado (PC=%d).\n", cpu.PSW.pc);
+        break;
+      }
+      ejecutarInst();
+      cycles++;
+    }
+    if (cycles >= max_cycles) {
+      printf("Ejecucion detenida: Limite de ciclos alcanzado (%d).\n", max_cycles);
+    }
   }
-  if (cycles >= max_cycles) {
-    printf("Ejecucion detenida: Limite de ciclos alcanzado (%d).\n",
-          max_cycles);
-  }
+
   printf("Ejecucion finalizada.\n");
+}
+
+/* === Fase 2: Comando ps === */
+void command_ps(void) {
+  process_print_table();
 }
 
 int main() {
@@ -242,6 +355,8 @@ int main() {
 
   abrir_log();
   inicializarCPU();
+  process_init(); /* Fase 2: inicializar tabla de procesos */
+  inicializarDMAThread();
 
   printf("=== Mini Kernel ===\n");
   printf("Escriba 'help' para ver los comandos.\n");
@@ -278,6 +393,8 @@ int main() {
       command_reg();
     } else if (strcmp(cmd, "step") == 0) {
       command_step();
+    } else if (strcmp(cmd, "ps") == 0) {
+      command_ps();
     } else if (strcmp(cmd, "run") == 0) {
       command_run();
     } else if (strcmp(cmd, "reset") == 0) {
