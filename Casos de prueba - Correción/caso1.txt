@@ -1,0 +1,10 @@
+_start 1
+.NumeroPalabras 7
+.NombreProg aritmetica
+04100010 //load 10 (Carga inmediata 10 en AC)
+00100020 //sum 20 (Suma inmediata 20 al AC. AC=30)
+02100002 //mult 2 (Multiplica por 2. AC=60)
+03100005 //divi 5 (Divide entre 5. AC=12)
+01100002 //res 2 (Resta 2. AC=10)
+05000050 //str 50 (Guarda AC en dirección relativa 50)
+13000000 //svc (Fin del programa / Llamada al sistema)

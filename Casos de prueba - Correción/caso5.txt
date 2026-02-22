@@ -1,0 +1,5 @@
+_start 1
+.NumeroPalabras 2
+.NombreProg errorseg
+04100005 //load 5
+05001900 //str 1900 (Intenta escribir en 1900 relativo. Si RB=300, Física=2200. Fuera de RAM. Debe abortar)

@@ -1,0 +1,7 @@
+src\main.c: In function 'command_load':
+src\main.c:66:25: warning: unknown conversion type character 'l' in format [-Wformat=]
+     if (sscanf(line, "%lld", &raw_val) == 1) {
+                         ^
+src\main.c:66:22: warning: too many arguments for format [-Wformat-extra-args]
+     if (sscanf(line, "%lld", &raw_val) == 1) {
+                      ^~~~~~
