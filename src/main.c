@@ -62,8 +62,8 @@ void command_load(const char *filename) {
     if (line[0] == '/' || line[0] == '.')
       continue;
 
-    long long raw_val;
-    if (sscanf(line, "%lld", &raw_val) == 1) {
+    long long raw_val = atoll(line);
+    if (1) { // atoll doesn't return count, but we keep structure for now
       if (address >= RAM_SIZE) {
         printf("Advertencia: Programa excede tamano de memoria RAM.\n");
         break;

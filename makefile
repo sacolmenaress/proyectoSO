@@ -1,15 +1,15 @@
 # Compilador y opciones
 CC = gcc
-CFLAGS = -Wall -Wextra -g -I./include
+CFLAGS = -Wall -Wextra -g -I./include -pthread
 
 # Nombre del ejecutable
 TARGET = arquitectura_virtual
 
 
-SRCS = src/architecture.c src/main.c src/log.c src/cpu.c
+SRCS = src/architecture.c src/main.c src/log.c src/cpu.c src/dma.c
 
 # Archivos objeto 
-OBJS = src/architecture.o src/main.o src/log.o src/cpu.o
+OBJS = src/architecture.o src/main.o src/log.o src/cpu.o src/dma.o
 
 #compilar todo el proyecto
 all: $(TARGET)
