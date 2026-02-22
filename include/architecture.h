@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
-#include <pthread.h>   // Mutex POSIX para arbitraje de bus
+#include <pthread.h>
 
 // Constantes del sistema
 #define RAM_SIZE 2000
