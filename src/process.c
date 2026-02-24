@@ -17,6 +17,35 @@ int   current_pid   = -1;
 int   system_ticks  =  0;
 int   partition_bitmap[NUM_PARTITIONS];
 
+/* NUEVO: Estructura original para la Cola de Listos (Ready Queue) */
+typedef struct {
+    int pids[MAX_PROCESSES];
+    int head;
+    int tail;
+    int count;
+} ReadyQueue_t;
+
+static ReadyQueue_t rq;
+
+void process_enqueue_ready(int pid) {
+    if (pid < 0 || pid >= MAX_PROCESSES) return;
+    if (rq.count >= MAX_PROCESSES) {
+        printf("[ERROR KERNEL] Ready Queue llena. No se puede encolar PID=%d\n", pid);
+        return;
+    }
+    rq.pids[rq.tail] = pid;
+    rq.tail = (rq.tail + 1) % MAX_PROCESSES;
+    rq.count++;
+}
+
+int process_dequeue_ready(void) {
+    if (rq.count == 0) return -1;
+    int pid = rq.pids[rq.head];
+    rq.head = (rq.head + 1) % MAX_PROCESSES;
+    rq.count--;
+    return pid;
+}
+
 /* Espacio en disco virtual reservado para procesos.
  * Cada proceso ocupa hasta PARTITION_SIZE palabras en DISK[].
  * Proceso 0 → DISK[0..339], proceso 1 → DISK[340..679], etc.
@@ -46,6 +75,12 @@ void process_init(void) {
     }
     current_pid  = -1;
     system_ticks =  0;
+
+    /* Inicializar la cola de listos */
+    rq.head  = 0;
+    rq.tail  = 0;
+    rq.count = 0;
+    memset(rq.pids, -1, sizeof(rq.pids));
 
     {
         char msg[128];
@@ -78,6 +113,11 @@ void process_change_state(int pid, ProcessState new_state) {
 
     ProcessState old_state = process_table[pid].state;
     process_table[pid].state = new_state;
+
+    /* Si pasa a READY, lo encolamos automáticamente (si no estaba ya) */
+    if (new_state == STATE_READY && old_state != STATE_READY) {
+        process_enqueue_ready(pid);
+    }
 
     char msg[256];
     snprintf(msg, sizeof(msg),
@@ -282,6 +322,8 @@ int process_create(const char *filename, const char *name) {
         p->ctx.ac_value  = 0;
         p->ctx.rx        = 0;
         p->ctx.condition = 0;
+        p->ctx.mode      = MODE_USER;
+        p->ctx.interrupt = 1;
 
         process_change_state(slot, STATE_READY);
     }
@@ -304,6 +346,8 @@ void process_save_context(int pid) {
     p->ctx.rb        = cpu.mp.base;
     p->ctx.rl        = cpu.mp.limit;
     p->ctx.condition = cpu.PSW.condition;
+    p->ctx.mode      = cpu.PSW.mode;
+    p->ctx.interrupt = cpu.PSW.interrupt;
 }
 
 /* ============================================================
@@ -321,10 +365,9 @@ void process_load_context(int pid) {
     cpu.mp.base      = p->ctx.rb;
     cpu.mp.limit     = p->ctx.rl;
     cpu.PSW.condition= p->ctx.condition;
+    cpu.PSW.mode     = p->ctx.mode;
+    cpu.PSW.interrupt= p->ctx.interrupt;
 
-    /* Siempre arranca en modo usuario con interrupciones habilitadas */
-    cpu.PSW.mode      = MODE_USER;
-    cpu.PSW.interrupt = 1;
     cpu.halted        = 0;
 }
 

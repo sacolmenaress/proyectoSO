@@ -54,6 +54,9 @@ typedef struct {
     int    rl;
     /* Código de condición */
     int    condition;
+    /* NUEVO: Modo de la CPU (Kernel/User) y estado de interrupciones */
+    int    mode;
+    int    interrupt;
 } ProcessContext_t;
 
 /* ============================================================
@@ -120,6 +123,10 @@ void process_load_to_ram(int pid);
 
 /* Convierte estado a string (para log) */
 const char *state_to_string(ProcessState s);
+
+/* NUEVO: Gestión de la Cola de Listos (Ready Queue) de forma original */
+void process_enqueue_ready(int pid);
+int  process_dequeue_ready(void);
 
 /* Imprime tabla de procesos en consola (comando 'ps') */
 void process_print_table(void);

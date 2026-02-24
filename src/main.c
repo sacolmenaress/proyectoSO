@@ -41,102 +41,27 @@ void command_load(const char *filename) {
     return;
   }
 
-  /* --- Compatibilidad Fase 1: también carga directamente en RAM ---
-   * Así los comandos 'step' y 'run' tradicionales siguen funcionando
-   * cuando no se usa el scheduler. */
-  FILE *file = fopen(filename, "r");
-  if (!file) {
-    printf("Error: No se pudo abrir el archivo '%s'.\n", filename);
-    return;
+  /* Contar procesos activos para dar un mensaje adecuado */
+  int active_cnt = 0;
+  for (int i = 0; i < MAX_PROCESSES; i++) {
+      if (process_table[i].pid != -1 && process_table[i].state != STATE_TERMINATED) {
+          active_cnt++;
+      }
   }
 
-  int start_pc = 0;
-  char line[256];
-  char progName[100] = "Unknown";
-  int numPalabras = 0;
-  int palabrasLeidas = 0;
+  PCB_t *p = &process_table[pid];
+  printf("Proceso '%s' creado exitosamente:\n", p->name);
+  printf("  PID             : %d\n", p->pid);
+  printf("  Partición RAM   : %d (RAM[%d..%d])\n", p->partition_id, p->base, p->limit);
+  printf("  Tamaño Código   : %d palabras\n", p->prog_size);
+  printf("  Punto Entrada   : %d (lógico)\n", p->entry_point);
+  printf("  Protección      : RB=%d, RL=%d\n", p->base, p->limit);
 
-  // 1. CAMBIAR A MODO KERNEL para escribir en RAM sin restricciones MMU
-  cpu.PSW.mode = MODE_KERNEL;
-
-  int address = OS_RESERVED; // Cargar programa a partir de posición 300
-
-  // Leer linea por linea
-  while (fgets(line, sizeof(line), file)) {
-    line[strcspn(line, "\r\n")] = 0;
-    if (strlen(line) == 0)
-      continue;
-
-    // Revisar metadatos
-    if (strncmp(line, "_start", 6) == 0) {
-      sscanf(line, "_start %d", &start_pc);
-      // Ajustar de base-1 (como viene en el archivo) a base-0 (uso interno)
-      if (start_pc > 0) start_pc -= 1;
-      continue;
-    }
-    if (strncmp(line, ".NumeroPalabras", 15) == 0) {
-      sscanf(line, ".NumeroPalabras %d", &numPalabras);
-      continue;
-    }
-    if (strncmp(line, ".NombreProg", 11) == 0) {
-      sscanf(line, ".NombreProg %s", progName);
-      continue;
-    }
-
-    // Ignorar comentarios
-    if (line[0] == '/' || line[0] == '.')
-      continue;
-
-    long long raw_val = atoll(line);
-    if (1) { // atoll doesn't return count, but we keep structure for now
-      if (address >= RAM_SIZE) {
-        printf("Advertencia: Programa excede tamano de memoria RAM.\n");
-        break;
-      }
-      long long abs_val = llabs(raw_val);
-      RAM[address].sign = (int)(abs_val / 10000000);
-      RAM[address].value = (int)(abs_val % 10000000);
-      if (raw_val < 0) {
-        RAM[address].sign = 1;
-      }
-      address++;
-      palabrasLeidas++;
-    }
+  if (active_cnt > 1) {
+      printf("\nSistema con %d procesos activos. Multiprogramación lista.\n", active_cnt);
+  } else {
+      printf("\nProceso listo para ejecución sencilla.\n");
   }
-  fclose(file);
-
-  // 2. CALCULAR ESPACIO DE PILA para el programa
-  //    La pila de usuario vive DESPUÉS del código del programa,
-  //    pero dentro de los límites de RL.
-  int stackSpace = RAM_SIZE - OS_RESERVED - palabrasLeidas;
-  if (stackSpace > 100) stackSpace = 100;  // Máximo 100 palabras de stack
-  if (stackSpace < 10)  stackSpace = 10;   // Mínimo 10 palabras de stack
-
-  // 3. CONFIGURAR REGISTROS DE PROTECCIÓN Y CONTEXTO
-  //    RB = inicio del área del programa (fijo en OS_RESERVED)
-  //    RL = RB + código + pila (fin del espacio disponible)
-  cpu.mp.base = OS_RESERVED;
-  cpu.mp.limit = RAM_SIZE - 1;
-
-  //    RX = número de palabras del programa (marca inicio de pila relativa)
-  cpu.stack.rx = palabrasLeidas;
-
-  //    SP = palabrasLeidas + stackSpace (tope relativo de la pila de usuario)
-  //    La pila crece hacia abajo desde este punto.
-  cpu.stack.sp = palabrasLeidas + stackSpace;
-
-  //    PC = _start ajustado (lógico, la MMU sumará RB al hacer fetch)
-  cpu.PSW.pc = start_pc;
-
-  // 4. VOLVER A MODO USUARIO y habilitar interrupciones
-  cpu.PSW.mode = MODE_USER;
-  cpu.PSW.interrupt = 1;
-  cpu.halted = 0;
-
-  printf("Programa '%s' cargado. Palabras: %d. Inicio: %d.\n", progName,
-        palabrasLeidas, start_pc);
-  printf("Protección de memoria: RB=%d, RL=%d, SP=%d, RX=%d\n",
-        cpu.mp.base, cpu.mp.limit, cpu.stack.sp, cpu.stack.rx);
 }
 
 void command_mem(int start, int count) {

@@ -48,7 +48,10 @@ void log_inicio_instruccion(int pc, int opcode) {
 }
 
 void log_resultado_instruccion(Word AC, int sp, int condition) {
-    char mensaje[200];
-    snprintf(mensaje, sizeof(mensaje), "AC=%d, SP=%d, Cond=%d", obtenerValorReal(AC), sp, condition);
+    char mensaje[256];
+    snprintf(mensaje, sizeof(mensaje), "AC=%d, SP=%d, Cond=%d, Mode=%s, Int=%d", 
+             obtenerValorReal(AC), sp, condition,
+             (cpu.PSW.mode == MODE_USER ? "USER" : "KERNEL"),
+             cpu.PSW.interrupt);
     escribir_log(mensaje);
 }

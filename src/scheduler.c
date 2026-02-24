@@ -37,9 +37,15 @@ static void dispatch(int old_pid, int new_pid) {
     process_change_state(new_pid, STATE_RUNNING);
 
     char msg[256];
-    snprintf(msg, sizeof(msg),
-             "[LOG] Quantum agotado. Proceso saliente: %d, Proceso entrante: %d",
-             old_pid, new_pid);
+    if (old_pid == -1) {
+        snprintf(msg, sizeof(msg),
+                 "[LOG] Cambio de contexto. Proceso saliente: NINGUNO, Proceso entrante: %d",
+                 new_pid);
+    } else {
+        snprintf(msg, sizeof(msg),
+                 "[LOG] Quantum agotado. Proceso saliente: %d, Proceso entrante: %d",
+                 old_pid, new_pid);
+    }
     escribir_log(msg);
 
     printf("[SCHEDULER] Despachando PID=%d (%s)\n",
@@ -96,22 +102,8 @@ static void scheduler_wake_sleeping(void) {
  * (búsqueda circular a partir de current_pid+1)
  * ============================================================ */
 static int scheduler_next_ready(void) {
-    if (current_pid == -1) {
-        /* Primer proceso: buscar desde el inicio */
-        for (int i = 0; i < MAX_PROCESSES; i++) {
-            if (process_table[i].state == STATE_READY)
-                return i;
-        }
-        return -1;
-    }
-
-    /* Búsqueda circular: desde current_pid+1 dando la vuelta */
-    for (int offset = 1; offset <= MAX_PROCESSES; offset++) {
-        int i = (current_pid + offset) % MAX_PROCESSES;
-        if (process_table[i].state == STATE_READY)
-            return i;
-    }
-    return -1; /* No hay ninguno READY */
+    /* Nueva lógica: simplemente sacamos de la cola de listos */
+    return process_dequeue_ready();
 }
 
 /* ============================================================
@@ -140,7 +132,9 @@ int scheduler_tick(void) {
         if (process_table[current_pid].quantum_counter >= PROCESS_QUANTUM) {
             int next = scheduler_next_ready();
             if (next != -1) {
-                /* Hay otro proceso listo: cambio de contexto. logging está en dispatch */
+                /* Hay otro proceso listo: cambio de contexto. 
+                 * NOTA: dispatch se encarga de cambiar el actual a READY 
+                 * y process_change_state lo meterá al final de la cola. */
                 dispatch(current_pid, next);
             } else {
                 /* No hay otro: el mismo sigue (reset del contador) */
@@ -215,9 +209,9 @@ void scheduler_handle_sleep(int duration_ticks) {
 
     char msg[128];
     snprintf(msg, sizeof(msg),
-             "SCHEDULER: PID=%d dormido por %d ticks (despierta en tick=%d).",
-             current_pid, duration_ticks,
-             process_table[current_pid].wake_tick);
+            "SCHEDULER: PID=%d dormido por %d ticks (despierta en tick=%d).",
+            current_pid, duration_ticks,
+            process_table[current_pid].wake_tick);
     escribir_log(msg);
     printf("[SCHEDULER] PID=%d duerme %d ticks.\n", current_pid, duration_ticks);
 
