@@ -109,6 +109,10 @@ void process_change_state(int pid, ProcessState new_state);
 /* Guarda el estado actual de la CPU en el PCB del proceso pid */
 void process_save_context(int pid);
 
+/* Recupera el contexto original del usuario desde la pila del sistema
+ * (usado cuando una interrupción como SVC causa un cambio de contexto) */
+void process_save_context_from_interrupt(int pid);
+
 /* Restaura el contexto del PCB del proceso pid hacia la CPU global */
 void process_load_context(int pid);
 

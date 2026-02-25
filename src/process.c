@@ -317,7 +317,7 @@ int process_create(const char *filename, const char *name) {
         p->ctx.pc        = entry_point;
         p->ctx.rb        = p->base;
         p->ctx.rl        = p->limit;
-        p->ctx.sp        = PARTITION_SIZE; /* relativo al inicio de partición, primer psh irá a size-1 */
+        p->ctx.sp        = PARTITION_SIZE - 1; /* último slot válido (base 0); primer PSH escribe aquí */
         p->ctx.ac_sign   = 0;
         p->ctx.ac_value  = 0;
         p->ctx.rx        = 0;
@@ -348,6 +348,39 @@ void process_save_context(int pid) {
     p->ctx.condition = cpu.PSW.condition;
     p->ctx.mode      = cpu.PSW.mode;
     p->ctx.interrupt = cpu.PSW.interrupt;
+}
+
+/* ============================================================
+ * SALVAR CONTEXTO DESDE INTERRUPCIÓN: Pila del Sistema → PCB
+ *
+ * Cuando lanzarInterrupcion() guarda el contexto del usuario en la
+ * pila del sistema (RAM[30-299]) y cambia a Modo Kernel, los 
+ * registros de la CPU ya NO contienen los valores del usuario.
+ * Esta función los recupera desde la pila (sysPop) y los guarda
+ * en el PCB para que el proceso despierte correctamente.
+ *
+ * Orden de Push (en lanzarInterrupcion): PC, AC, RX, RB, RL, CC, Mode
+ * Orden de Pop (inverso):                Mode, CC, RL, RB, RX, AC, PC
+ * ============================================================ */
+void process_save_context_from_interrupt(int pid) {
+    if (pid < 0 || pid >= MAX_PROCESSES) return;
+    PCB_t *p = &process_table[pid];
+
+    int temp;
+    sysPop(&temp); p->ctx.mode      = temp;
+    sysPop(&temp); p->ctx.condition = temp;
+    sysPop(&temp); p->ctx.rl        = temp;
+    sysPop(&temp); p->ctx.rb        = temp;
+    sysPop(&temp); p->ctx.rx        = temp;
+    sysPop(&temp);
+    p->ctx.ac_sign  = (temp < 0) ? 1 : 0;
+    p->ctx.ac_value = (temp < 0) ? -temp : temp;
+    sysPop(&temp); p->ctx.pc        = temp;
+
+    /* SP no se guarda en la pila del sistema; lo tomamos tal cual */
+    p->ctx.sp        = cpu.stack.sp;
+    /* Al restaurar, las interrupciones deben volver a estar ON */
+    p->ctx.interrupt = 1;
 }
 
 /* ============================================================

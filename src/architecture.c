@@ -109,7 +109,15 @@ void lanzarInterrupcion(int codigo) {
   cpu.PSW.mode = MODE_KERNEL;
   cpu.PSW.interrupt = 0;
 
-  // 3. Leer dirección del manejador desde RAM[codigo] (vector en RAM)
+  // 3. Notificar al Kernel de C (NUEVO: Conexión Fase 2)
+  int handled = kernel_interrupt_handler(codigo, cpu.IR.operand);
+  if (handled) {
+    /* El kernel ya consumió la pila del sistema y salvó el contexto.
+     * No debemos saltar al handler de RAM (RETRN). */
+    return;
+  }
+
+  // 4. Leer dirección del manejador desde RAM[codigo] (vector en RAM)
   int handler = RAM[codigo].value;  // RAM[0..8] contiene direcciones
 
   if (handler != 0) {

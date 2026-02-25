@@ -100,35 +100,71 @@ void command_reg() {
 }
 
 void command_step() {
-  if (cpu.PSW.pc >= RAM_SIZE) {
-    printf("PC fuera de rango.\n");
-    return;
-  }
-  if (cpu.halted) {
-    printf("CPU detenida.\n");
-    return;
-  }
-  if (cpu.PSW.mode == MODE_USER && cpu.PSW.pc >= cpu.stack.rx) {
-    printf("Fin del programa alcanzado (PC=%d).\n", cpu.PSW.pc);
-    return;
+  /* --- Fase 2: si hay procesos activos, usar el scheduler --- */
+  int hay_procesos = 0;
+  for (int i = 0; i < MAX_PROCESSES; i++) {
+    if (process_table[i].pid != -1 &&
+        process_table[i].state != STATE_TERMINATED) {
+      hay_procesos = 1;
+      break;
+    }
   }
 
-  // Modo debugger con información detallada
-  printf("\n==== Modo Debugger ====\n");
-  printf("Dirección: %d\n", cpu.PSW.pc);
+  if (hay_procesos) {
+    /* Modo scheduler: el tick decide quién corre */
+    int hay_running = scheduler_tick();
+    if (!hay_running) {
+      printf("[STEP] Sistema idle: no hay proceso listo para ejecutar.\n");
+      return;
+    }
+    /* Verificar si el proceso actual terminó */
+    if (cpu.halted) {
+      printf("[STEP] PID=%d terminó por HALT.\n", current_pid);
+      scheduler_handle_terminate();
+      return;
+    }
+    if (cpu.PSW.mode == MODE_USER && current_pid != -1 &&
+        cpu.PSW.pc >= process_table[current_pid].prog_size) {
+      printf("[STEP] PID=%d fin de programa (PC=%d).\n",
+             current_pid, cpu.PSW.pc);
+      scheduler_handle_terminate();
+      return;
+    }
+  } else {
+    /* Modo Fase 1 (sin procesos): chequeos directos */
+    if (cpu.PSW.pc >= RAM_SIZE) {
+      printf("PC fuera de rango.\n");
+      return;
+    }
+    if (cpu.halted) {
+      printf("CPU detenida.\n");
+      return;
+    }
+    if (cpu.PSW.mode == MODE_USER && cpu.PSW.pc >= cpu.stack.rx) {
+      printf("Fin del programa alcanzado (PC=%d).\n", cpu.PSW.pc);
+      return;
+    }
+  }
 
   // Decodificar y mostrar instrucción ANTES de ejecutar
-  Word inst = RAM[cpu.PSW.pc];
-  int opcode = (inst.sign * 10) + (inst.value / 1000000);
-  int addressing = (inst.value / 100000) % 10;
-  int operand = inst.value % 100000;
+  printf("\n==== Modo Debugger (tick=%d, PID=%d) ====\n",
+         system_ticks, current_pid);
+  printf("Dirección física: %d\n", cpu.mp.base + cpu.PSW.pc);
 
-  printf("Instrucción: Opcode=%02d, Modo=%d, Operando=%05d\n", opcode,
-        addressing, operand);
+  int dir_fisica = (cpu.PSW.mode == MODE_USER)
+                   ? cpu.mp.base + cpu.PSW.pc
+                   : cpu.PSW.pc;
+  Word inst = RAM[dir_fisica];
+  int opcode     = (inst.sign * 10) + (inst.value / 1000000);
+  int addressing = (inst.value / 100000) % 10;
+  int operand    = inst.value % 100000;
+
+  printf("Instrucción: Opcode=%02d, Modo=%d, Operando=%05d\n",
+         opcode, addressing, operand);
 
   // Guardar estado anterior
   Word AC_antes = cpu.AC;
-  int PC_antes = cpu.PSW.pc;
+  int  PC_antes = cpu.PSW.pc;
 
   // EJECUTAR
   printf("Ejecutando...\n");
@@ -136,12 +172,11 @@ void command_step() {
 
   // DESPUÉS: mostrar resultado
   printf("Resultado: AC=%d (antes=%d), PC=%d (antes=%d)\n",
-        obtenerValorReal(cpu.AC), obtenerValorReal(AC_antes), cpu.PSW.pc,
-        PC_antes);
+        obtenerValorReal(cpu.AC), obtenerValorReal(AC_antes),
+        cpu.PSW.pc, PC_antes);
 
-  // Preguntar al usuario
-  printf("\n[s] Siguiente  [r] Ver registros  [m <dir>] Ver memoria  [Enter] "
-        "Continuar: ");
+  // Sub-menú interactivo
+  printf("\n[r] Registros  [m <dir>] Memoria  [Enter] Continuar: ");
   char input[50];
   if (fgets(input, sizeof(input), stdin)) {
     input[strcspn(input, "\n")] = 0;
@@ -149,15 +184,14 @@ void command_step() {
       command_reg();
     } else if (input[0] == 'm') {
       int addr = 0;
-      if (sscanf(input, "m %d", &addr) == 1) {
+      if (sscanf(input, "m %d", &addr) == 1)
         command_mem(addr, 5);
-      } else {
+      else
         printf("Uso: m <direccion>\n");
-      }
     }
-    // Si es 's', vacío, o cualquier otra cosa, solo continúa
   }
 }
+
 
 void command_run() {
   /* === Fase 2: Ejecutar con planificador Round-Robin ===

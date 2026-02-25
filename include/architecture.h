@@ -192,4 +192,13 @@ void ejecutarInst(void);
 int obtenerOperando(int *ok);
 int obtenerValorReal(Word w);
 
+/* Funciones de la Pila del Sistema (RAM[30-299]) */
+int sysPush(int valor);
+int sysPop(int *valor);
+
+/* Hook para que el hardware notifique al Kernel de C sobre una interrupción.
+ * Retorna 1 si el kernel manejó la interrupción (no ejecutar RETRN).
+ * Retorna 0 si no la manejó (seguir flujo normal con handler de RAM). */
+int kernel_interrupt_handler(int codigo, int operando);
+
 #endif

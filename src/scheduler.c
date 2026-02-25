@@ -188,24 +188,13 @@ void scheduler_handle_terminate(void) {
 void scheduler_handle_sleep(int duration_ticks) {
     if (current_pid == -1) return;
 
-    process_save_context(current_pid);
+    /* CLAVE: Recuperar los registros REALES del usuario desde la pila
+     * del sistema, NO los registros actuales (que ya son de Kernel). */
+    process_save_context_from_interrupt(current_pid);
     process_table[current_pid].wake_tick = system_ticks + duration_ticks;
     process_change_state(current_pid, STATE_SLEEPING);
-    process_free_partition(current_pid); /* La partición se podría liberar o mantener */
-    /* Opción conservadora: mantener la partición (no liberar hasta TERMINATED) */
-    /* Si se quiere liberar: process_free_partition(current_pid) */
-    /* Por simplicidad, la mantenemos para no tener que recargar desde disco */
-    /* Re-marcar como ocupada (process_free_partition la limpió) */
-    if (process_table[current_pid].partition_id == -1) {
-        /* Ya fue liberada, re-asignar */
-        int part = process_find_partition();
-        if (part != -1) {
-            partition_bitmap[part] = 1;
-            process_table[current_pid].partition_id = part;
-        }
-    } else {
-        /* No fue liberada (no llamamos process_free_partition en este camino) */
-    }
+    /* Un proceso SLEEPING retiene su partición RAM.
+     * Solo libera en TERMINATED. */
 
     char msg[128];
     snprintf(msg, sizeof(msg),
@@ -217,3 +206,45 @@ void scheduler_handle_sleep(int duration_ticks) {
 
     current_pid = -1;
 }
+
+/* ============================================================
+ * MANEJADOR DE INTERRUPCIONES DEL KERNEL (Hook desde C)
+ * ============================================================
+ * Esta función es llamada por el hardware (architecture.c) cada
+ * vez que ocurre una interrupción, DESPUÉS de salvar el contexto.
+ */
+int kernel_interrupt_handler(int codigo, int operando) {
+  /* Ignorar si no hay proceso corriendo (excepto para reloj) */
+  if (current_pid == -1 && codigo != INT_CLOCK) {
+    return 0;
+  }
+
+  char msg[128];
+  switch (codigo) {
+    case INT_SYSCALL: /* Código 2 - SVC */
+      if (operando == 5) { /* SVC 5: SLEEP */
+          int duracion = 10;
+          snprintf(msg, sizeof(msg), "KERNEL: Solicitud SLEEP (%d ticks) de PID=%d", duracion, current_pid);
+          escribir_log(msg);
+          scheduler_handle_sleep(duracion);
+          return 1; /* Manejado: no ejecutar RETRN */
+      }
+      snprintf(msg, sizeof(msg), "KERNEL: Syscall %d no implementada para PID=%d", operando, current_pid);
+      escribir_log(msg);
+      return 0; /* No manejado: dejar flujo normal */
+
+    case INT_INVALID_INST:
+    case INT_INVALID_ADDR:
+    case INT_OVERFLOW:
+    case INT_UNDERFLOW:
+      snprintf(msg, sizeof(msg), "KERNEL: Error Fatal (Int %d) en PID=%d. Terminando.", codigo, current_pid);
+      escribir_log(msg);
+      printf("\n[ERROR FATAL] PID=%d causa interrupción %d. Abortando.\n", current_pid, codigo);
+      scheduler_handle_terminate();
+      return 1; /* Manejado: proceso ya terminado */
+
+    default:
+      return 0; /* No manejado: flujo normal */
+  }
+}
+
