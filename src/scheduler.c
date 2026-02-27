@@ -209,41 +209,116 @@ void scheduler_handle_sleep(int duration_ticks) {
 
 /* ============================================================
  * MANEJADOR DE INTERRUPCIONES DEL KERNEL (Hook desde C)
+ * RUTINAS DE INTERRUPCIONES
  * ============================================================
  * Esta función es llamada por el hardware (architecture.c) cada
- * vez que ocurre una interrupción, DESPUÉS de salvar el contexto.
- */
+ * vez que ocurre una interrupción, DESPUÉS de salvar el contexto
+ * en la pila del sistema.
+ *
+ * Implementa la RUTINA MANEJADORA de cada tipo de interrupción.
+ * Retorna 1 si el kernel manejó la interrupción (no ejecutar RETRN).
+ * Retorna 0 si no la manejó (seguir flujo normal con ISR de RAM).
+ *
+ * Política de anidamiento: NO se permiten interrupciones anidadas.
+ * Las interrupciones se deshabilitan al entrar (lanzarInterrupcion)
+ * y se rehabilitan al restaurar contexto (RETRN).
+ *
+ * Prioridad (por código, menor = mayor prioridad):
+ *   Errores fatales (5,6) > Aritméticos (7,8) > Syscall (2) >
+ *   Reloj (3) > E/S (4) > Códigos inválidos (0,1)
+ * ============================================================ */
 int kernel_interrupt_handler(int codigo, int operando) {
-  /* Ignorar si no hay proceso corriendo (excepto para reloj) */
-  if (current_pid == -1 && codigo != INT_CLOCK) {
-    return 0;
-  }
+  char msg[256];
 
-  char msg[128];
   switch (codigo) {
-    case INT_SYSCALL: /* Código 2 - SVC */
+
+    /* ── Código 0: Llamada al sistema inválida ──────────────── */
+    case INT_INVALID_SYSCALL:
+      snprintf(msg, sizeof(msg),
+               "KERNEL: Syscall inválida (operando=%d) en PID=%d. Ignorando.",
+               operando, current_pid);
+      escribir_log(msg);
+      printf("[KERNEL] Syscall inválida ignorada para PID=%d\n", current_pid);
+      return 0; /* No manejado: dejar que la ISR en RAM ejecute RETRN */
+
+    /* ── Código 1: Código de interrupción inválido ─────────── */
+    case INT_INVALID_INT:
+      snprintf(msg, sizeof(msg),
+               "KERNEL: Código de interrupción inválido recibido. PID=%d.",
+               current_pid);
+      escribir_log(msg);
+      printf("[KERNEL] Interrupción inválida ignorada.\n");
+      return 0; /* No manejado: RETRN restaurará el contexto */
+
+    /* ── Código 2: Llamada al sistema (SVC) ────────────────── */
+    case INT_SYSCALL:
+      if (current_pid == -1) return 0;
       if (operando == 5) { /* SVC 5: SLEEP */
           int duracion = 10;
-          snprintf(msg, sizeof(msg), "KERNEL: Solicitud SLEEP (%d ticks) de PID=%d", duracion, current_pid);
+          snprintf(msg, sizeof(msg),
+                   "KERNEL: Solicitud SLEEP (%d ticks) de PID=%d",
+                   duracion, current_pid);
           escribir_log(msg);
           scheduler_handle_sleep(duracion);
           return 1; /* Manejado: no ejecutar RETRN */
       }
-      snprintf(msg, sizeof(msg), "KERNEL: Syscall %d no implementada para PID=%d", operando, current_pid);
+      snprintf(msg, sizeof(msg),
+               "KERNEL: Syscall %d no implementada para PID=%d",
+               operando, current_pid);
       escribir_log(msg);
       return 0; /* No manejado: dejar flujo normal */
 
+    /* ── Código 3: Interrupción de reloj ───────────────────── */
+    case INT_CLOCK:
+      snprintf(msg, sizeof(msg),
+               "KERNEL: Tick de reloj (system_ticks=%d).", system_ticks);
+      escribir_log(msg);
+      return 0; /* No manejado: RETRN restaurará contexto */
+
+    /* ── Código 4: Fin de Entrada/Salida (DMA completado) ─── */
+    case INT_IO_COMPLETE:
+      snprintf(msg, sizeof(msg),
+               "KERNEL: DMA completado. Transferencia E/S finalizada (PID=%d).",
+               current_pid);
+      escribir_log(msg);
+      printf("[KERNEL] DMA completado para PID=%d\n", current_pid);
+      return 0; /* No manejado: RETRN restaurará contexto */
+
+    /* ── Códigos 5,6: Errores fatales (instrucción/dirección) ── */
     case INT_INVALID_INST:
     case INT_INVALID_ADDR:
-    case INT_OVERFLOW:
-    case INT_UNDERFLOW:
-      snprintf(msg, sizeof(msg), "KERNEL: Error Fatal (Int %d) en PID=%d. Terminando.", codigo, current_pid);
+      if (current_pid == -1) return 0;
+      snprintf(msg, sizeof(msg),
+               "KERNEL: Error Fatal (Int %d) en PID=%d. Terminando proceso.",
+               codigo, current_pid);
       escribir_log(msg);
-      printf("\n[ERROR FATAL] PID=%d causa interrupción %d. Abortando.\n", current_pid, codigo);
+      printf("\n[ERROR FATAL] PID=%d causa interrupción %d. Abortando.\n",
+             current_pid, codigo);
       scheduler_handle_terminate();
       return 1; /* Manejado: proceso ya terminado */
 
+    /* ── Códigos 7,8: Errores aritméticos (underflow/overflow) ── */
+    case INT_UNDERFLOW:
+    case INT_OVERFLOW:
+      if (current_pid == -1) return 0;
+      snprintf(msg, sizeof(msg),
+               "KERNEL: Error aritmético (Int %d: %s) en PID=%d. Terminando.",
+               codigo,
+               (codigo == INT_OVERFLOW) ? "Overflow" : "Underflow",
+               current_pid);
+      escribir_log(msg);
+      printf("\n[ERROR ARITMÉTICO] PID=%d: %s. Abortando.\n",
+             current_pid,
+             (codigo == INT_OVERFLOW) ? "Overflow" : "Underflow");
+      scheduler_handle_terminate();
+      return 1; /* Manejado: proceso ya terminado */
+
+    /* ── Default: interrupción desconocida ──────────────────── */
     default:
+      snprintf(msg, sizeof(msg),
+               "KERNEL: Interrupción desconocida (código=%d). Ignorando.",
+               codigo);
+      escribir_log(msg);
       return 0; /* No manejado: flujo normal */
   }
 }

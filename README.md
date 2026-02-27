@@ -49,12 +49,24 @@ make clean
 
 ## Estructura del proyecto
 ``` bash
-.
-├── include/                 # Archivos de cabecera
-├── src/                     # Código fuente
-├── makefile                 # Archivo de compilación
-├── log.txt                  # Archivo de registro
-└── arquitectura_virtual.exe # Ejecutable
+ProyectoSO/
+├── include/
+│   ├── architecture.h    ← Tipos (Word, CPU_t), constantes, prototipos
+│   ├── process.h         ← ProcessState, ProcessContext_t, PCB_t, prototipos
+│   ├── scheduler.h       ← scheduler_tick, handle_terminate, handle_sleep
+│   ├── log.h             ← Funciones de logging
+│   └── cpu.h             ← Prototipo de inicializar_cpu (legacy)
+├── src/
+│   ├── architecture.c    ← Ciclo instrucción, MMU, interrupciones, pila sistema
+│   ├── process.c         ← Gestión de procesos, cola de listos, contextos
+│   ├── scheduler.c       ← Planificador RR, dispatch, kernel_interrupt_handler
+│   ├── main.c            ← CLI, comandos load/run/step/ps
+│   ├── log.c             ← Escritura en log.txt
+│   ├── dma.c             ← Hilo DMA asíncrono
+│   └── cpu.c             ← Wrapper de inicialización (legacy)
+├── CasosPrueba/          ← Archivos de test (.txt con instrucciones)
+├── makefile
+└── log.txt               ← Registro de ejecución
 ```
 
 ## Tecnologías utilizadas

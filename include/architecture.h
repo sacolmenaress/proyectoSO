@@ -17,7 +17,9 @@
 // [21..29]  Reservado para futuros manejadores
 // [30..299] Pila del Sistema (crece hacia abajo desde 299)
 #define OS_IVT_START 0        // Inicio del Vector de Interrupciones
-#define OS_HANDLER_ADDR 20    // Dirección del manejador genérico
+#define OS_ISR_BASE       20    // Dirección base de las ISRs en RAM
+#define OS_NUM_ISRS        9    // Número de ISRs (códigos 0-8)
+#define OS_ISR_END        28    // Última ISR: RAM[28]
 #define OS_STACK_TOP 299      // Tope de la pila del sistema
 #define OS_STACK_BOTTOM 30    // Fondo mínimo de la pila del sistema
 

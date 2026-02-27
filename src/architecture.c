@@ -118,11 +118,16 @@ void lanzarInterrupcion(int codigo) {
   }
 
   // 4. Leer dirección del manejador desde RAM[codigo] (vector en RAM)
-  int handler = RAM[codigo].value;  // RAM[0..8] contiene direcciones
+  int handler = RAM[codigo].value;  // RAM[0..8] contiene direcciones de ISR
 
   if (handler != 0) {
-    printf("Saltando al manejador en dirección %d\n", handler);
-    cpu.PSW.pc = handler;  // Siguiente fetch leerá el manejador
+    char log_isr[256];
+    snprintf(log_isr, sizeof(log_isr),
+             "ISR: Saltando a rutina manejadora en RAM[%d] para interrupción %d (%s)",
+             handler, codigo, INT_DESCRIPTIONS[codigo]);
+    escribir_log(log_isr);
+    printf("Saltando a ISR en RAM[%d]\n", handler);
+    cpu.PSW.pc = handler;  // Siguiente fetch leerá la ISR (RETRN)
   } else {
     printf("No hay manejador configurado para esta interrupción.\n");
     if (codigo == INT_INVALID_ADDR || codigo == INT_INVALID_INST ||
@@ -273,40 +278,60 @@ void inicializarVectorInterrupciones() {
  * Inicializar el Área Reservada del SO en RAM (posiciones 0-299)
  *
  * Estructura:
- *   [0..8]    - Vector de Interrupciones: cada posición contiene la dirección
- *               del manejador correspondiente al código de interrupción.
- *   [20]      - Manejador genérico: instrucción RETRN (opcode 14) que
- *               restaura el contexto y retorna de la interrupción.
- *   [21..29]  - Reservado para manejadores específicos futuros.
+ *   [0..8]    - Vector de Interrupciones: cada posición RAM[i] contiene
+ *               la dirección de la ISR correspondiente al código i.
+ *               RAM[0]=20, RAM[1]=21, ..., RAM[8]=28
+ *   [20..28]  - ISRs individuales: cada una contiene la instrucción RETRN
+ *               (opcode 14) que restaura contexto y retorna de interrupción.
+ *               La lógica real de cada interrupción se ejecuta en C
+ *               (kernel_interrupt_handler) ANTES de llegar aquí.
  *   [30..299] - Área de pila del sistema (crece hacia abajo desde 299).
  *
  * Esta función debe llamarse DESPUÉS de inicializarMemoria() para que
  * los valores no sean sobreescritos por la limpieza de RAM.
  */
 void inicializarAreaSO() {
+  // Nombres de las ISRs para log/debug
+  static const char *ISR_NAMES[] = {
+      "ISR_SYSCALL_INVALIDO",    // 0
+      "ISR_INTERRUPCION_INVALIDA", // 1
+      "ISR_SYSCALL",             // 2
+      "ISR_RELOJ",               // 3
+      "ISR_FIN_ES",              // 4
+      "ISR_INSTRUCCION_INVALIDA",// 5
+      "ISR_DIRECCION_INVALIDA",  // 6
+      "ISR_UNDERFLOW",           // 7
+      "ISR_OVERFLOW"             // 8
+  };
+
   // 1. Escribir el Vector de Interrupciones en RAM[0..8]
-  //    Cada posición guarda la dirección del manejador para ese código.
-  //    Por ahora, todos apuntan al manejador genérico en OS_HANDLER_ADDR (20).
+  //    Cada código de interrupción i apunta a su ISR propia en RAM[20+i]
   for (int i = 0; i <= INT_OVERFLOW; i++) {
-    RAM[OS_IVT_START + i].sign = 0;
-    RAM[OS_IVT_START + i].value = OS_HANDLER_ADDR;
+    int isr_addr = OS_ISR_BASE + i;  // RAM[20], RAM[21], ..., RAM[28]
+
+    // Vector en RAM: RAM[i] = dirección de la ISR
+    RAM[OS_IVT_START + i].sign  = 0;
+    RAM[OS_IVT_START + i].value = isr_addr;
 
     // Sincronizar con el array C de vectorInterrupciones
-    vectorInterrupciones[i] = OS_HANDLER_ADDR;
+    vectorInterrupciones[i] = isr_addr;
+
+    // 2. Colocar la ISR en RAM[20+i]
+    //    Instrucción RETRN (opcode 14):
+    //    Formato de palabra: sign=1, value=4000000
+    //    Decodificación: opcode = (1*10)+4 = 14, addressing=0, operand=00000
+    RAM[isr_addr].sign  = 1;
+    RAM[isr_addr].value = 4000000;
   }
 
-  // 2. Colocar el manejador genérico en RAM[20]
-  //    Instrucción RETRN (opcode 14):
-  //    Formato de palabra: sign=1, value=4000000
-  //    Decodificación: opcode = (1*10)+4 = 14, addressing=0, operand=00000
-  RAM[OS_HANDLER_ADDR].sign = 1;
-  RAM[OS_HANDLER_ADDR].value = 4000000;
-
-  // 3. Las posiciones 21-29 quedan en 0 (reservadas para futuros manejadores)
+  // 3. Las posiciones 29 queda en 0 (reservada)
   // 4. Las posiciones 30-299 quedan en 0 (área de pila del sistema, disponible)
 
-  printf("Área del SO inicializada: Vector[0-%d]->%d, Handler@%d=RETRN\n",
-         INT_OVERFLOW, OS_HANDLER_ADDR, OS_HANDLER_ADDR);
+  printf("Área del SO inicializada:\n");
+  for (int i = 0; i <= INT_OVERFLOW; i++) {
+    printf("  Vector[%d] -> RAM[%d] (%s) = RETRN\n",
+           i, OS_ISR_BASE + i, ISR_NAMES[i]);
+  }
 }
 
 // Inicializar CPU y RAM
