@@ -1,4 +1,5 @@
 #include "architecture.h"
+#include "process.h"
 #include "log.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -358,6 +359,10 @@ void inicializarCPU() {
   cpu.dma.io_type = 0;
   cpu.dma.mem_addr = 0;
   cpu.dma.status = 0;
+
+  // Inicializar Timer (0 = desactivado hasta que TTI lo configure)
+  cpu.timer_limit = 0;
+  cpu.timer_counter = 0;
 
   // Inicializar Componentes
   inicializarMemoria();
@@ -732,9 +737,15 @@ void decodeExecute() {
     break;
   }
 
-  case OPC_TTI: { // 17 - Timer Tick Interrupt [NUEVO]
+  case OPC_TTI: { // 17 - Timer: establece intervalo del reloj
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-    printf("TTI: Timer Tick ejecutado.\n");
+    int ok;
+    int valor = obtenerOperando(&ok);
+    if (ok) {
+      cpu.timer_limit = valor;
+      cpu.timer_counter = 0;
+      printf("TTI: Timer configurado cada %d ciclos\n", valor);
+    }
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
     break;
   }
@@ -852,6 +863,17 @@ void decodeExecute() {
 
   case OPC_PSH: { // 25 - Push AC a la pila
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
+    // Verificar stack overflow: SP no puede bajar hasta pisar el código del programa
+    int code_limit = 0;
+    if (current_pid >= 0 && current_pid < MAX_PROCESSES) {
+      code_limit = process_table[current_pid].prog_size;
+    }
+    if (cpu.stack.sp - 1 < code_limit) {
+      printf("ERROR PSH: Stack Overflow (SP=%d pisaría el código que termina en %d)\n",
+             cpu.stack.sp, code_limit);
+      lanzarInterrupcion(INT_INVALID_ADDR);
+      break;
+    }
     // Crece hacia abajo: decrementamos primero
     cpu.stack.sp--;
     if (!escribirMemoria(cpu.stack.sp, cpu.AC)) {
@@ -865,6 +887,8 @@ void decodeExecute() {
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     if (leerMemoria(cpu.stack.sp, &cpu.AC)) {
         cpu.stack.sp++; // Decrece el tamaño: incrementamos SP
+        // Actualizar códigos de condición según el valor cargado en AC
+        actualizarCodCond((long long)obtenerValorReal(cpu.AC));
     }
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
     break;
@@ -953,4 +977,13 @@ void ejecutarInst() {
     return;
   fetch();
   decodeExecute();
+
+  // Timer: incrementar contador y generar interrupción de reloj si alcanza el límite
+  if (cpu.timer_limit > 0) {
+    cpu.timer_counter++;
+    if (cpu.timer_counter >= cpu.timer_limit) {
+      cpu.timer_counter = 0;
+      lanzarInterrupcion(INT_CLOCK);
+    }
+  }
 }

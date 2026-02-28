@@ -174,7 +174,9 @@ typedef struct {
   PSW_t PSW;
   DMA_t dma;
   int halted;
-  int system_sp;   // Stack pointer del sistema (pila en RAM[30-299], crece hacia abajo)
+  int system_sp;       // Stack pointer del sistema (pila en RAM[30-299], crece hacia abajo)
+  int timer_limit;     // Intervalo del timer (cada cuántos ciclos interrumpe, 0=desactivado)
+  int timer_counter;   // Contador de ciclos actual del timer
 } CPU_t;
 
 // Variables Globales
