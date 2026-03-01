@@ -1,0 +1,12 @@
+#Carpetas de otros proyectos
+Galavis/
+Paccaneglla/
+bin/ 
+CasosPrueba/
+
+*.exe
+*.o
+arquitectura_virtual
+
+log.txt
+.vscode/
