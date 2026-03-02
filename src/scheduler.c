@@ -251,22 +251,99 @@ int kernel_interrupt_handler(int codigo, int operando) {
       return 0; /* No manejado: RETRN restaurará el contexto */
 
     /* ── Código 2: Llamada al sistema (SVC) ────────────────── */
-    case INT_SYSCALL:
+    /* ABI de Syscalls (inspirado en Paccaneglla):
+     *   - El CÓDIGO de la syscall viene en el AC del usuario.
+     *   - Los PARÁMETROS se leen del stack con kernel_pop_stack().
+     *
+     * Syscalls soportadas:
+     *   1 = termina_prog(estado)   → Termina el proceso actual
+     *   2 = imprime_pantalla(val)  → Imprime un valor en consola
+     *   3 = leer_pantalla()        → Lee un entero del teclado → AC
+     *   4 = dormir(tics)           → Duerme el proceso N tics
+     */
+    case INT_SYSCALL: {
       if (current_pid == -1) return 0;
-      if (operando == 5) { /* SVC 5: SLEEP */
-          int duracion = 10;
+
+      /* El código de la syscall viene en el AC.
+       * Dentro de lanzarInterrupcion(), cpu.AC fue pusheado a la
+       * pila del sistema pero NO fue borrado, así que aún tiene
+       * el valor original del usuario. */
+      int syscall_code = obtenerValorReal(cpu.AC);
+      int param = 0;
+
+      switch (syscall_code) {
+
+      case 1: /* ── termina_prog(estado) ─────────────────────── */
+          /* El programa puso un código de estado en el stack
+           * con PSH antes de llamar a SVC. Lo leemos. */
+          kernel_pop_stack(current_pid, &param);
           snprintf(msg, sizeof(msg),
-                   "KERNEL: Solicitud SLEEP (%d ticks) de PID=%d",
-                   duracion, current_pid);
+                   "KERNEL: Syscall 1 (TERMINAR) PID=%d, estado=%d",
+                   current_pid, param);
           escribir_log(msg);
-          scheduler_handle_sleep(duracion);
-          return 1; /* Manejado: no ejecutar RETRN */
+          printf("[KERNEL] PID=%d solicita terminar (estado=%d)\n",
+                 current_pid, param);
+          scheduler_handle_terminate();
+          return 1; /* Manejado: proceso eliminado */
+
+      case 2: /* ── imprime_pantalla(valor) ──────────────────── */
+          /* El programa puso el valor a imprimir en el stack. */
+          kernel_pop_stack(current_pid, &param);
+          snprintf(msg, sizeof(msg),
+                   "KERNEL: Syscall 2 (IMPRIMIR) PID=%d, valor=%d",
+                   current_pid, param);
+          escribir_log(msg);
+          printf("\n[PANTALLA PID=%d]: %d\n", current_pid, param);
+          return 0; /* No manejado: RETRN restaurará contexto */
+
+      case 3: { /* ── leer_pantalla() ────────────────────────── */
+          /* Leemos un entero del teclado y lo dejamos en el AC
+           * del usuario para que lo encuentre al volver. */
+          printf("\n[ENTRADA PID=%d]: Ingrese un valor: ", current_pid);
+          int input_val = 0;
+          if (scanf("%d", &input_val) != 1) {
+              input_val = 0;
+              /* Limpiar buffer si el usuario escribió letras */
+              while (getchar() != '\n');
+          }
+
+          /* Estrategia: salvamos contexto de la pila del sistema
+           * al PCB, modificamos el AC en el PCB, y restauramos
+           * el contexto de vuelta a la CPU. */
+          process_save_context_from_interrupt(current_pid);
+          process_table[current_pid].ctx.ac_sign  = (input_val < 0) ? 1 : 0;
+          process_table[current_pid].ctx.ac_value = (input_val < 0) ? -input_val : input_val;
+          process_load_context(current_pid);
+          process_change_state(current_pid, STATE_RUNNING);
+
+          snprintf(msg, sizeof(msg),
+                   "KERNEL: Syscall 3 (LEER) PID=%d, valor leído=%d",
+                   current_pid, input_val);
+          escribir_log(msg);
+          return 1; /* Manejado: ya restauramos contexto nosotros */
       }
-      snprintf(msg, sizeof(msg),
-               "KERNEL: Syscall %d no implementada para PID=%d",
-               operando, current_pid);
-      escribir_log(msg);
-      return 0; /* No manejado: dejar flujo normal */
+
+      case 4: /* ── dormir(tics) ─────────────────────────────── */
+          /* El programa puso la duración en el stack. */
+          kernel_pop_stack(current_pid, &param);
+          if (param <= 0) param = 1; /* Mínimo 1 tic */
+          snprintf(msg, sizeof(msg),
+                   "KERNEL: Syscall 4 (DORMIR %d tics) PID=%d",
+                   param, current_pid);
+          escribir_log(msg);
+          scheduler_handle_sleep(param);
+          return 1; /* Manejado: proceso dormido */
+
+      default:
+          snprintf(msg, sizeof(msg),
+                   "KERNEL: Syscall desconocida (código AC=%d) PID=%d",
+                   syscall_code, current_pid);
+          escribir_log(msg);
+          printf("[KERNEL] Syscall %d no reconocida para PID=%d\n",
+                 syscall_code, current_pid);
+          return 0; /* No manejado: RETRN restaura y sigue */
+      }
+    }
 
     /* ── Código 3: Interrupción de reloj ───────────────────── */
     case INT_CLOCK:

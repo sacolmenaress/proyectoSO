@@ -9,15 +9,17 @@
 // Función para mostrar comandos
 void command_help() {
   printf("Comandos disponibles:\n");
-  printf("  load <archivo>       : Cargar un programa (crea proceso)\n");
-  printf("  ps                   : Ver tabla de procesos\n");
-  printf("  mem <inicio> <cant>  : Ver contenido de memoria\n");
-  printf("  reg                  : Ver registros del CPU\n");
-  printf("  run                  : Ejecutar con planificador Round-Robin\n");
+  printf("  ejecutar <p1> [p2]...: Cargar y ejecutar programas en Round-Robin\n");
+  printf("  load <archivo>       : Cargar un programa (crea proceso sin ejecutar)\n");
+  printf("  run                  : Ejecutar procesos cargados en Round-Robin\n");
   printf("  step                 : Ejecutar una instruccion (paso a paso)\n");
-  printf("  reset                : Reiniciar CPU y Memoria\n");
+  printf("  ps                   : Ver tabla de procesos\n");
+  printf("  memestat             : Ver mapa y porcentaje de uso de memoria\n");
+  printf("  mem <inicio> <cant>  : Ver contenido de memoria crudo\n");
+  printf("  reg                  : Ver registros del CPU\n");
+  printf("  reiniciar            : Reiniciar CPU, Memoria y Procesos\n");
   printf("  setvec <cod> <dir>   : Configurar vector de interrupciones\n");
-  printf("  exit                 : Salir del simulador\n");
+  printf("  apagar               : Salir del simulador\n");
 }
 
 // Función para cargar programa desde archivo
@@ -212,6 +214,7 @@ void command_run() {
     /* --- Modo Fase 2: planificador Round-Robin --- */
     printf("Ejecutando con planificador Round-Robin (quantum=%d)...\n",
            PROCESS_QUANTUM);
+    printf("Presione Ctrl+C para abortar la ejecución.\n");
     int max_cycles = 100000; /* límite de seguridad */
     int cycles = 0;
     int idle_count = 0;
@@ -306,6 +309,27 @@ void command_ps(void) {
   process_print_table();
 }
 
+/* === Fase 2: Comando memestat === */
+void command_memestat(void) {
+    printf("\n=== Mapa de Memoria (RAM_SIZE=%d) ===\n", RAM_SIZE);
+    printf("  [0 - %d] : Sistema Operativo (%d palabras ocupadas)\n", OS_RESERVED - 1, OS_RESERVED);
+    int particiones_usadas = 0;
+    for (int i = 0; i < NUM_PARTITIONS; i++) {
+        int base = OS_RESERVED + (i * PARTITION_SIZE);
+        int limit = base + PARTITION_SIZE - 1;
+        if (partition_bitmap[i] == 1) {
+            printf("  [%d - %d] : Partición %d - OCUPADA\n", base, limit, i);
+            particiones_usadas++;
+        } else {
+            printf("  [%d - %d] : Partición %d - LIBRE\n", base, limit, i);
+        }
+    }
+    int total_usado = OS_RESERVED + (particiones_usadas * PARTITION_SIZE);
+    float porcentaje = ((float)total_usado / RAM_SIZE) * 100.0f;
+    printf("----------------------------------------\n");
+    printf("Uso total: %.2f%% (%d/%d palabras)\n\n", porcentaje, total_usado, RAM_SIZE);
+}
+
 int main() {
   char input[100];
   char *cmd;
@@ -331,10 +355,26 @@ int main() {
     if (cmd == NULL)
       continue;
 
-    if (strcmp(cmd, "exit") == 0) {
+    if (strcmp(cmd, "exit") == 0 || strcmp(cmd, "apagar") == 0) {
       break;
     } else if (strcmp(cmd, "help") == 0) {
       command_help();
+    } else if (strcmp(cmd, "ejecutar") == 0) {
+      /* === cargar + ejecutar en un solo paso === */
+      arg1 = strtok(NULL, " ");
+      if (!arg1) {
+        printf("Uso: ejecutar <prog1.txt> [prog2.txt] ...\n");
+      } else {
+        int loaded_any = 0;
+        while (arg1 != NULL) {
+          command_load(arg1);
+          loaded_any = 1;
+          arg1 = strtok(NULL, " ");
+        }
+        if (loaded_any) {
+          command_run();
+        }
+      }
     } else if (strcmp(cmd, "load") == 0) {
       arg1 = strtok(NULL, " ");
       if (arg1)
@@ -348,6 +388,8 @@ int main() {
         command_mem(atoi(arg1), atoi(arg2));
       else
         printf("Uso: mem <inicio> <cantidad>\n");
+    } else if (strcmp(cmd, "memestat") == 0) {
+      command_memestat();
     } else if (strcmp(cmd, "reg") == 0) {
       command_reg();
     } else if (strcmp(cmd, "step") == 0) {
@@ -356,9 +398,10 @@ int main() {
       command_ps();
     } else if (strcmp(cmd, "run") == 0) {
       command_run();
-    } else if (strcmp(cmd, "reset") == 0) {
+    } else if (strcmp(cmd, "reset") == 0 || strcmp(cmd, "reiniciar") == 0) {
       inicializarCPU();
-      printf("Sistema reiniciado.\n");
+      process_init(); /*limpiar procesos al reiniciar */
+      printf("Sistema reiniciado (CPU, Pila SO y Procesos).\n");
     } else if (strcmp(cmd, "setvec") == 0) {
       // Configurar vector de interrupciones
       arg1 = strtok(NULL, " ");

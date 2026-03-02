@@ -82,6 +82,12 @@ typedef struct {
     /* Planificación */
     int              quantum_counter; /* Ticks consumidos en el turno actual */
     int              wake_tick;       /* Tick en que debe despertar (SLEEPING)*/
+
+    /* Persistencia de la Pila del Sistema —
+     * Cada proceso guarda su propia copia de la pila del sistema
+     * para que al cambiar de contexto no se pierdan los datos. */
+    int              saved_system_sp;
+    Word             saved_system_stack[20]; /* Suficiente para 2 contextos anidados */
 } PCB_t;
 
 /* ============================================================
@@ -134,5 +140,10 @@ int  process_dequeue_ready(void);
 
 /* Imprime tabla de procesos en consola (comando 'ps') */
 void process_print_table(void);
+
+/* Lee un parámetro de la pila del usuario durante una interrupción.
+ * Accede a RAM[base+sp] directamente y hace pop (incrementa SP).
+ * Retorna 0 si éxito, -1 si error. */
+int kernel_pop_stack(int pid, int *value);
 
 #endif /* PROCESS_H */

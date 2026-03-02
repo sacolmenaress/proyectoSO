@@ -92,7 +92,6 @@ void lanzarInterrupcion(int codigo) {
   char mensaje[256];
   snprintf(mensaje, sizeof(mensaje), "INTERRUPCIÓN: Código %d - %s", codigo,
           INT_DESCRIPTIONS[codigo]);
-  printf("\n*** %s ***\n", mensaje);
   escribir_log(mensaje);
 
   // 1. GUARDAR CONTEXTO en la pila del sistema (7 registros)
@@ -127,7 +126,6 @@ void lanzarInterrupcion(int codigo) {
              "ISR: Saltando a rutina manejadora en RAM[%d] para interrupción %d (%s)",
              handler, codigo, INT_DESCRIPTIONS[codigo]);
     escribir_log(log_isr);
-    printf("Saltando a ISR en RAM[%d]\n", handler);
     cpu.PSW.pc = handler;  // Siguiente fetch leerá la ISR (RETRN)
   } else {
     printf("No hay manejador configurado para esta interrupción.\n");
@@ -687,10 +685,6 @@ void decodeExecute() {
   case OPC_SVC: { // 13 - Llamada al sistema
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     lanzarInterrupcion(INT_SYSCALL);
-    int param = (cpu.stack.sp > OS_RESERVED)
-                    ? obtenerValorReal(RAM[cpu.stack.sp - 1])
-                    : 0;
-    printf("DEBUG SVC: Param en stack=%d\n", param);
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
     break;
   }
@@ -705,7 +699,6 @@ void decodeExecute() {
       // Guardado: PC, AC, RX, RB, RL, CC, Mode
       // Restaurar: Mode, CC, RL, RB, RX, AC, PC
       int temp;
-      printf("Restaurando contexto desde pila del sistema...\n");
       sysPop(&temp); cpu.PSW.mode = temp;
       sysPop(&temp); cpu.PSW.condition = temp;
       sysPop(&temp); cpu.mp.limit = temp;

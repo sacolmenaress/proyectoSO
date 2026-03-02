@@ -325,6 +325,9 @@ int process_create(const char *filename, const char *name) {
         p->ctx.mode      = MODE_USER;
         p->ctx.interrupt = 1;
 
+        /* Inicializar pila del sistema para este proceso */
+        p->saved_system_sp = OS_STACK_TOP;
+
         process_change_state(slot, STATE_READY);
     }
 
@@ -348,6 +351,15 @@ void process_save_context(int pid) {
     p->ctx.condition = cpu.PSW.condition;
     p->ctx.mode      = cpu.PSW.mode;
     p->ctx.interrupt = cpu.PSW.interrupt;
+
+    /* Persistencia de la Pila del Sistema */
+    p->saved_system_sp = cpu.system_sp;
+    int words_in_stack = OS_STACK_TOP - cpu.system_sp;
+    if (words_in_stack > 0 && words_in_stack <= 20) {
+        for (int i = 0; i < words_in_stack; i++) {
+            p->saved_system_stack[i] = RAM[cpu.system_sp + 1 + i];
+        }
+    }
 }
 
 /* ============================================================
@@ -401,6 +413,15 @@ void process_load_context(int pid) {
     cpu.PSW.mode     = p->ctx.mode;
     cpu.PSW.interrupt= p->ctx.interrupt;
 
+    /* Restaurar Pila del Sistema */
+    cpu.system_sp = p->saved_system_sp;
+    int words_in_stack = OS_STACK_TOP - cpu.system_sp;
+    if (words_in_stack > 0 && words_in_stack <= 20) {
+        for (int i = 0; i < words_in_stack; i++) {
+            RAM[cpu.system_sp + 1 + i] = p->saved_system_stack[i];
+        }
+    }
+
     cpu.halted        = 0;
 }
 
@@ -432,4 +453,39 @@ void process_print_table(void) {
     if (!encontrado)
         printf("(No hay procesos registrados)\n");
     printf("====================================\n\n");
+}
+
+/* ============================================================
+ * KERNEL POP STACK — Lee un parámetro de la pila del usuario
+ *
+ * Durante una interrupción (estamos en Modo Kernel), no podemos
+ * usar leerMemoria() porque la MMU traduce diferente en Kernel.
+ * Accedemos directamente a la dirección física: base + sp.
+ *
+ * Inspirado en el diseño de Paccaneglla: encapsula el acceso
+ * al stack del proceso sin tocar los registros reales de la CPU
+ * más allá de SP.
+ *
+ * Retorna 0 si éxito, -1 si error.
+ * ============================================================ */
+int kernel_pop_stack(int pid, int *value) {
+    if (pid < 0 || pid >= MAX_PROCESSES) return -1;
+
+    int sp   = cpu.stack.sp;   /* SP lógico del usuario          */
+    int base = cpu.mp.base;    /* Base física de su partición     */
+    int phys = base + sp;      /* Dirección física real en RAM    */
+
+    /* Validar que la dirección física está dentro de la RAM */
+    if (phys < 0 || phys >= RAM_SIZE) {
+        printf("[KERNEL] ERROR: kernel_pop_stack dirección inválida %d\n", phys);
+        return -1;
+    }
+
+    /* Leer el valor en signo-magnitud y convertir a entero C */
+    *value = obtenerValorReal(RAM[phys]);
+
+    /* Actualizar SP del proceso (pop = mover SP hacia arriba) */
+    cpu.stack.sp++;
+
+    return 0; /* Éxito */
 }
