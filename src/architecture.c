@@ -123,8 +123,8 @@ void lanzarInterrupcion(int codigo) {
   if (handler != 0) {
     char log_isr[256];
     snprintf(log_isr, sizeof(log_isr),
-             "ISR: Saltando a rutina manejadora en RAM[%d] para interrupción %d (%s)",
-             handler, codigo, INT_DESCRIPTIONS[codigo]);
+            "ISR: Saltando a rutina manejadora en RAM[%d] para interrupción %d (%s)",
+            handler, codigo, INT_DESCRIPTIONS[codigo]);
     escribir_log(log_isr);
     cpu.PSW.pc = handler;  // Siguiente fetch leerá la ISR (RETRN)
   } else {
@@ -854,23 +854,35 @@ void decodeExecute() {
   // STACK (25-26)
   // ============================================================
 
-  case OPC_PSH: { // 25 - Push AC a la pila
+  case OPC_PSH: { // 25 - Push operando a la pila
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-    // Verificar stack overflow: SP no puede bajar hasta pisar el código del programa
-    int code_limit = 0;
-    if (current_pid >= 0 && current_pid < MAX_PROCESSES) {
-      code_limit = process_table[current_pid].prog_size;
-    }
-    if (cpu.stack.sp - 1 < code_limit) {
-      printf("ERROR PSH: Stack Overflow (SP=%d pisaría el código que termina en %d)\n",
-             cpu.stack.sp, code_limit);
-      lanzarInterrupcion(INT_INVALID_ADDR);
-      break;
-    }
-    // Crece hacia abajo: decrementamos primero
-    cpu.stack.sp--;
-    if (!escribirMemoria(cpu.stack.sp, cpu.AC)) {
-        cpu.stack.sp++; // Rollback
+    
+    int ok;
+    int valor_a_empilar = obtenerOperando(&ok);
+    
+    if (ok) {
+        // Verificar stack overflow: SP no puede bajar hasta pisar el código del programa
+        int code_limit = 0;
+        if (current_pid >= 0 && current_pid < MAX_PROCESSES) {
+          code_limit = process_table[current_pid].prog_size;
+        }
+        if (cpu.stack.sp - 1 < code_limit) {
+          printf("ERROR PSH: Stack Overflow (SP=%d pisaría el código que termina en %d)\n",
+                 cpu.stack.sp, code_limit);
+          lanzarInterrupcion(INT_INVALID_ADDR);
+          break;
+        }
+        
+        // Crece hacia abajo: decrementamos primero
+        cpu.stack.sp--;
+        
+        // Convertimos el operando int a tipo Word para guardarlo en la RAM
+        Word dato;
+        asignarValor(&dato, valor_a_empilar);
+        
+        if (!escribirMemoria(cpu.stack.sp, dato)) {
+            cpu.stack.sp++; // Rollback
+        }
     }
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
     break;

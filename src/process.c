@@ -4,9 +4,10 @@
  */
 
 #include "process.h"
+#include "architecture.h"
 #include "log.h"
+#include "console_colors.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 /* ============================================================
@@ -128,7 +129,7 @@ void process_change_state(int pid, ProcessState new_state) {
             state_to_string(new_state),
             system_ticks);
     escribir_log(msg);
-    printf("[PROCESO] PID=%d (%s): %s -> %s\n",
+    printf(ANSI_FG_GREEN "[PROCESO]" ANSI_RESET " PID=%d (%s): %s -> %s\n",
             pid,
             process_table[pid].name,
             state_to_string(old_state),
@@ -208,7 +209,7 @@ int process_create(const char *filename, const char *name) {
     /* 3. Leer el archivo y guardar en DISK[] */
     FILE *f = fopen(filename, "r");
     if (!f) {
-        printf("ERROR: No se pudo abrir el archivo '%s'.\n", filename);
+        printf(ANSI_FG_B_RED "ERROR:" ANSI_RESET " No se pudo abrir el archivo '%s'.\n", filename);
         return -1;
     }
 
@@ -429,8 +430,8 @@ void process_load_context(int pid) {
  * IMPRIMIR TABLA DE PROCESOS (comando 'ps')
  * ============================================================ */
 void process_print_table(void) {
-    printf("\n=== TABLA DE PROCESOS (tick=%d) ===\n", system_ticks);
-    printf("%-4s %-20s %-14s %-6s %-6s %-6s %-5s\n",
+    printf(ANSI_FG_B_BLUE "\n=== TABLA DE PROCESOS (tick=%d) ===\n" ANSI_RESET, system_ticks);
+    printf(ANSI_FG_CYAN "%-4s %-20s %-14s %-6s %-6s %-6s %-5s\n" ANSI_RESET,
         "PID", "Nombre", "Estado", "Base", "Lím", "PC", "Q");
     printf("------------------------------------------------------------\n");
 

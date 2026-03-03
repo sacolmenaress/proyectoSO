@@ -1,0 +1,2 @@
+gcc -Wall -Wextra -g -I./include -pthread -c src/architecture.c -o src/architecture.o
+gcc -Wall -Wextra -g -I./include -pthread -o arquitectura_virtual src/architecture.o src/main.o src/log.o src/cpu.o src/dma.o src/process.o src/scheduler.o

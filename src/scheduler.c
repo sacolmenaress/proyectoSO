@@ -10,13 +10,16 @@
  *  - Rota entre procesos READY en orden circular.
  *  - Guarda y restaura contexto en cada cambio de proceso.
  *
- * NO modifica architecture.c, dma.c, log.c, cpu.c.
+ * NO modifica architecture.c, dma.c, log.c.
  */
 
 #include "scheduler.h"
+#include "architecture.h"
 #include "process.h"
 #include "log.h"
+#include "console_colors.h"
 #include <stdio.h>
+#include <string.h>
 
 /* ============================================================
  * dispatch — Despacha un proceso: carga su contexto en la CPU
@@ -48,8 +51,11 @@ static void dispatch(int old_pid, int new_pid) {
     }
     escribir_log(msg);
 
-    printf("[SCHEDULER] Despachando PID=%d (%s)\n",
-           new_pid, process_table[new_pid].name);
+    /* Imprimir dispatch SÓLO si es un proceso diferente o no había nada corriendo */
+    if (old_pid != new_pid) {
+        printf(ANSI_FG_B_YELLOW "[SCHEDULER]" ANSI_RESET " Despachando PID=%.2d (%s)\n",
+               new_pid, process_table[new_pid].name);
+    }
 }
 
 /* ============================================================
@@ -143,6 +149,7 @@ int scheduler_tick(void) {
                         "[LOG] Quantum agotado. Proceso saliente: %d, Proceso entrante: %d",
                         current_pid, current_pid);
                 escribir_log(log_msg);
+                printf(ANSI_FG_B_YELLOW "[SCHEDULER]" ANSI_RESET " Quantum agotado. PID=%.2d sigue ejecutando.\n", current_pid);
                 process_table[current_pid].quantum_counter = 0;
             }
         }
@@ -176,7 +183,7 @@ void scheduler_handle_terminate(void) {
             "SCHEDULER: PID=%d (%s) TERMINADO. Partición liberada.",
             current_pid, process_table[current_pid].name);
     escribir_log(msg);
-    printf("[SCHEDULER] PID=%d (%s) terminó.\n",
+    printf(ANSI_FG_B_YELLOW "[SCHEDULER]" ANSI_RESET " PID=%d (%s) terminó.\n",
             current_pid, process_table[current_pid].name);
 
     current_pid = -1;
@@ -202,7 +209,7 @@ void scheduler_handle_sleep(int duration_ticks) {
             current_pid, duration_ticks,
             process_table[current_pid].wake_tick);
     escribir_log(msg);
-    printf("[SCHEDULER] PID=%d duerme %d ticks.\n", current_pid, duration_ticks);
+    printf(ANSI_FG_B_YELLOW "[SCHEDULER]" ANSI_RESET " PID=%d duerme %d ticks.\n", current_pid, duration_ticks);
 
     current_pid = -1;
 }
@@ -238,7 +245,7 @@ int kernel_interrupt_handler(int codigo, int operando) {
                "KERNEL: Syscall inválida (operando=%d) en PID=%d. Ignorando.",
                operando, current_pid);
       escribir_log(msg);
-      printf("[KERNEL] Syscall inválida ignorada para PID=%d\n", current_pid);
+      printf(ANSI_FG_B_MAGENTA "[KERNEL]" ANSI_RESET " Syscall inválida ignorada para PID=%d\n", current_pid);
       return 0; /* No manejado: dejar que la ISR en RAM ejecute RETRN */
 
     /* ── Código 1: Código de interrupción inválido ─────────── */
@@ -247,7 +254,7 @@ int kernel_interrupt_handler(int codigo, int operando) {
                "KERNEL: Código de interrupción inválido recibido. PID=%d.",
                current_pid);
       escribir_log(msg);
-      printf("[KERNEL] Interrupción inválida ignorada.\n");
+      printf(ANSI_FG_B_MAGENTA "[KERNEL]" ANSI_RESET " Interrupción inválida ignorada.\n");
       return 0; /* No manejado: RETRN restaurará el contexto */
 
     /* ── Código 2: Llamada al sistema (SVC) ────────────────── */
@@ -281,7 +288,7 @@ int kernel_interrupt_handler(int codigo, int operando) {
                    "KERNEL: Syscall 1 (TERMINAR) PID=%d, estado=%d",
                    current_pid, param);
           escribir_log(msg);
-          printf("[KERNEL] PID=%d solicita terminar (estado=%d)\n",
+          printf(ANSI_FG_B_MAGENTA "[KERNEL]" ANSI_RESET " PID=%d solicita terminar (estado=%d)\n",
                  current_pid, param);
           scheduler_handle_terminate();
           return 1; /* Manejado: proceso eliminado */
@@ -293,13 +300,13 @@ int kernel_interrupt_handler(int codigo, int operando) {
                    "KERNEL: Syscall 2 (IMPRIMIR) PID=%d, valor=%d",
                    current_pid, param);
           escribir_log(msg);
-          printf("\n[PANTALLA PID=%d]: %d\n", current_pid, param);
+          printf("\n" ANSI_FG_B_GREEN "[PANTALLA PID=%d]:" ANSI_RESET " %d\n", current_pid, param);
           return 0; /* No manejado: RETRN restaurará contexto */
 
       case 3: { /* ── leer_pantalla() ────────────────────────── */
           /* Leemos un entero del teclado y lo dejamos en el AC
            * del usuario para que lo encuentre al volver. */
-          printf("\n[ENTRADA PID=%d]: Ingrese un valor: ", current_pid);
+          printf("\n" ANSI_FG_B_GREEN "[ENTRADA PID=%d]:" ANSI_RESET " Ingrese un valor: ", current_pid);
           int input_val = 0;
           if (scanf("%d", &input_val) != 1) {
               input_val = 0;

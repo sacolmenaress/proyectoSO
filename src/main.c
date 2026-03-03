@@ -2,24 +2,25 @@
 #include "log.h"
 #include "process.h"    /* Fase 2: gestión de procesos */
 #include "scheduler.h"  /* Fase 2: planificador Round-Robin */
+#include "console_colors.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 // Función para mostrar comandos
 void command_help() {
-  printf("Comandos disponibles:\n");
-  printf("  ejecutar <p1> [p2]...: Cargar y ejecutar programas en Round-Robin\n");
-  printf("  load <archivo>       : Cargar un programa (crea proceso sin ejecutar)\n");
-  printf("  run                  : Ejecutar procesos cargados en Round-Robin\n");
-  printf("  step                 : Ejecutar una instruccion (paso a paso)\n");
-  printf("  ps                   : Ver tabla de procesos\n");
-  printf("  memestat             : Ver mapa y porcentaje de uso de memoria\n");
-  printf("  mem <inicio> <cant>  : Ver contenido de memoria crudo\n");
-  printf("  reg                  : Ver registros del CPU\n");
-  printf("  reiniciar            : Reiniciar CPU, Memoria y Procesos\n");
-  printf("  setvec <cod> <dir>   : Configurar vector de interrupciones\n");
-  printf("  apagar               : Salir del simulador\n");
+  printf(ANSI_FG_B_MAGENTA "\nCOMANDOS DISPONIBLES:\n\n" ANSI_RESET);
+  printf(ANSI_FG_B_WHITE "  ejecutar " ANSI_FG_CYAN "<p1> [p2]... " ANSI_RESET ": Cargar y ejecutar programas en Round-Robin\n");
+  printf(ANSI_FG_B_WHITE "  load " ANSI_FG_CYAN "<archivo>       " ANSI_RESET ": Cargar un programa (crea proceso sin ejecutar)\n");
+  printf(ANSI_FG_B_WHITE "  run                  " ANSI_RESET ": Ejecutar procesos cargados en Round-Robin\n");
+  printf(ANSI_FG_B_WHITE "  step                 " ANSI_RESET ": Ejecutar una instruccion (paso a paso)\n");
+  printf(ANSI_FG_B_WHITE "  ps                   " ANSI_RESET ": Ver tabla de procesos\n");
+  printf(ANSI_FG_B_WHITE "  memestat             " ANSI_RESET ": Ver mapa y porcentaje de uso de memoria\n");
+  printf(ANSI_FG_B_WHITE "  mem " ANSI_FG_CYAN "<inicio> <cant>  " ANSI_RESET ": Ver contenido de memoria crudo\n");
+  printf(ANSI_FG_B_WHITE "  reg                  " ANSI_RESET ": Ver registros del CPU\n");
+  printf(ANSI_FG_B_WHITE "  reiniciar            " ANSI_RESET ": Reiniciar CPU, Memoria y Procesos\n");
+  printf(ANSI_FG_B_WHITE "  setvec " ANSI_FG_CYAN "<cod> <dir>   " ANSI_RESET ": Configurar vector de interrupciones\n");
+  printf(ANSI_FG_B_WHITE "  apagar               " ANSI_RESET ": Salir del simulador\n\n");
 }
 
 // Función para cargar programa desde archivo
@@ -318,10 +319,10 @@ void command_memestat(void) {
         int base = OS_RESERVED + (i * PARTITION_SIZE);
         int limit = base + PARTITION_SIZE - 1;
         if (partition_bitmap[i] == 1) {
-            printf("  [%d - %d] : Partición %d - OCUPADA\n", base, limit, i);
+            printf("  [%d - %d] : Partición %d - " ANSI_FG_B_RED "OCUPADA" ANSI_RESET "\n", base, limit, i);
             particiones_usadas++;
         } else {
-            printf("  [%d - %d] : Partición %d - LIBRE\n", base, limit, i);
+            printf("  [%d - %d] : Partición %d - " ANSI_FG_B_GREEN "LIBRE" ANSI_RESET "\n", base, limit, i);
         }
     }
     int total_usado = OS_RESERVED + (particiones_usadas * PARTITION_SIZE);
@@ -341,11 +342,21 @@ int main() {
   process_init(); /* Fase 2: inicializar tabla de procesos */
   inicializarDMAThread();
 
-  printf("=== Mini Kernel ===\n");
-  printf("Escriba 'help' para ver los comandos.\n");
+  CLEAR_SCREEN();
+  printf(ANSI_FG_B_MAGENTA);
+  printf("  __  __ _       _   _  __                    _ \n");
+  printf(" |  \\/  (_)     (_) | |/ /                   | |\n");
+  printf(" | \\  / |_ _ __  _  | ' / ___ _ __ _ __   ___| |\n");
+  printf(" | |\\/| | | '_ \\| | |  < / _ \\ '__| '_ \\ / _ \\ |\n");
+  printf(" | |  | | | | | | | | . \\  __/ |  | | | |  __/ |\n");
+  printf(" |_|  |_|_|_| |_|_| |_|\\_\\___|_|  |_| |_|\\___|_|\n");
+  printf(ANSI_RESET "\n");
+
+  printf(ANSI_FG_B_WHITE "¡Bienvenido al Mini Kernel de SO! \n" ANSI_RESET);
+  printf("Escriba '" ANSI_FG_B_YELLOW "help" ANSI_RESET "' para ver los comandos disponibles.\n\n");
 
   while (1) {
-    printf("SO> ");
+    printf(ANSI_FG_B_MAGENTA "OS" ANSI_FG_WHITE "> " ANSI_RESET);
     if (fgets(input, sizeof(input), stdin) == NULL)
       break;
 
