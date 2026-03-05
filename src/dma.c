@@ -29,7 +29,7 @@ void* dma_thread_func(void* arg) {
         if (disk_addr >= DISK_SIZE || disk_addr < 0) {
             cpu.dma.status = 1;
         } else {
-            if (cpu.dma.io_type == 0) { // LEER de disco a RAM
+            if (cpu.dma.io_type == 0) { // Lee de disco a RAM
                 Word data = DISK[disk_addr];
                 // Intentar escribir en RAM (esto puede fallar por protección MMU, 
                 // pero el DMA suele tener acceso privilegiado o se valida antes)
@@ -42,7 +42,7 @@ void* dma_thread_func(void* arg) {
                 } else {
                     cpu.dma.status = 1;
                 }
-            } else { // ESCRIBIR de RAM a disco
+            } else { // Escribir de RAM a disco
                 int dirReal = cpu.dma.mem_addr;
                 if (cpu.PSW.mode == MODE_USER) dirReal += cpu.mp.base;
 
@@ -58,9 +58,7 @@ void* dma_thread_func(void* arg) {
 
         cpu.dma.pending = 0;
         
-        // Disparar interrupción de fin de E/S
-        // IMPORTANTE: lanzarInterrupcion requiere el mutex? 
-        // Sí, porque modifica registros del CPU.
+        // Disparar interrupción de fin de E/S, esto es importante porque lanzarInterrupcion requiere el mutex, ya que este modifica registros del CPU.
         lanzarInterrupcion(INT_IO_COMPLETE);
         
         pthread_mutex_unlock(&bus_mutex);

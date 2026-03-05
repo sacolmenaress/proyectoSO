@@ -1,16 +1,16 @@
 /*
- * scheduler.c — Planificador Round-Robin (Fase 2)
+ * scheduler.c — Planificador Round-Robin
  *
  * Implementa el planificador de procesos con algoritmo Round-Robin
  * de quantum = PROCESS_QUANTUM (2 ticks).
  *
- * Reglas:
+ * Caracteristicas:
  *  - Admite procesos en estado NEW si hay partición libre.
  *  - Despierta procesos SLEEPING cuando su wake_tick <= system_ticks.
  *  - Rota entre procesos READY en orden circular.
  *  - Guarda y restaura contexto en cada cambio de proceso.
  *
- * NO modifica architecture.c, dma.c, log.c.
+ * No modifica architecture.c, dma.c, log.c.
  */
 
 #include "scheduler.h"
@@ -21,9 +21,9 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ============================================================
+/* 
  * dispatch — Despacha un proceso: carga su contexto en la CPU
- * ============================================================ */
+ */
 static void dispatch(int old_pid, int new_pid) {
     /* 1. Si había un proceso corriendo, guardar su contexto */
     if (old_pid != -1 &&
@@ -58,9 +58,9 @@ static void dispatch(int old_pid, int new_pid) {
     }
 }
 
-/* ============================================================
+/* 
  * scheduler_admit_new — Pasa procesos NEW a READY si hay RAM
- * ============================================================ */
+ */
 static void scheduler_admit_new(void) {
     for (int i = 0; i < MAX_PROCESSES; i++) {
         if (process_table[i].state != STATE_NEW) continue;
@@ -86,9 +86,9 @@ static void scheduler_admit_new(void) {
     }
 }
 
-/* ============================================================
+/* 
  * scheduler_wake_sleeping — Despierta procesos cuyo tiempo expiró
- * ============================================================ */
+ */
 static void scheduler_wake_sleeping(void) {
     for (int i = 0; i < MAX_PROCESSES; i++) {
         if (process_table[i].state != STATE_SLEEPING) continue;
@@ -103,22 +103,22 @@ static void scheduler_wake_sleeping(void) {
     }
 }
 
-/* ============================================================
+/* 
  * scheduler_next_ready — Busca el siguiente proceso READY
  * (búsqueda circular a partir de current_pid+1)
- * ============================================================ */
+ */
 static int scheduler_next_ready(void) {
-    /* Nueva lógica: simplemente sacamos de la cola de listos */
+    /* Aqui simplemente sacamos de la cola de listos */
     return process_dequeue_ready();
 }
 
-/* ============================================================
+/* 
  * scheduler_tick — Llamar UNA VEZ por cada ciclo de CPU
  *
  * Retorna:
  *   1  → hay un proceso RUNNING (ejecutar ejecutarInst())
  *   0  → no hay nada que ejecutar (idle)
- * ============================================================ */
+ */
 int scheduler_tick(void) {
     system_ticks++;
 
@@ -134,12 +134,12 @@ int scheduler_tick(void) {
 
         process_table[current_pid].quantum_counter++;
 
-        /* ¿Se agotó el quantum? → Preempción */
+        /* Si se agota el quantum → Preempción */
         if (process_table[current_pid].quantum_counter >= PROCESS_QUANTUM) {
             int next = scheduler_next_ready();
             if (next != -1) {
                 /* Hay otro proceso listo: cambio de contexto. 
-                 * NOTA: dispatch se encarga de cambiar el actual a READY 
+                 * El dispatch se encarga de cambiar el actual a READY 
                  * y process_change_state lo meterá al final de la cola. */
                 dispatch(current_pid, next);
             } else {
@@ -168,9 +168,9 @@ int scheduler_tick(void) {
     return 0;
 }
 
-/* ============================================================
+/* 
  * scheduler_handle_terminate — Llamar cuando el proceso actual termina
- * ============================================================ */
+ */
 void scheduler_handle_terminate(void) {
     if (current_pid == -1) return;
 
@@ -189,13 +189,13 @@ void scheduler_handle_terminate(void) {
     current_pid = -1;
 }
 
-/* ============================================================
+/* 
  * scheduler_handle_sleep — Llamar cuando el proceso pide dormir
- * ============================================================ */
+ */
 void scheduler_handle_sleep(int duration_ticks) {
     if (current_pid == -1) return;
 
-    /* CLAVE: Recuperar los registros REALES del usuario desde la pila
+    /* Recuperar los registros reales del usuario desde la pila
      * del sistema, NO los registros actuales (que ya son de Kernel). */
     process_save_context_from_interrupt(current_pid);
     process_table[current_pid].wake_tick = system_ticks + duration_ticks;
@@ -214,10 +214,10 @@ void scheduler_handle_sleep(int duration_ticks) {
     current_pid = -1;
 }
 
-/* ============================================================
- * MANEJADOR DE INTERRUPCIONES DEL KERNEL (Hook desde C)
+/* 
+ * MANEJADOR DE INTERRUPCIONES DEL KERNEL
  * RUTINAS DE INTERRUPCIONES
- * ============================================================
+ * 
  * Esta función es llamada por el hardware (architecture.c) cada
  * vez que ocurre una interrupción, DESPUÉS de salvar el contexto
  * en la pila del sistema.
@@ -233,13 +233,13 @@ void scheduler_handle_sleep(int duration_ticks) {
  * Prioridad (por código, menor = mayor prioridad):
  *   Errores fatales (5,6) > Aritméticos (7,8) > Syscall (2) >
  *   Reloj (3) > E/S (4) > Códigos inválidos (0,1)
- * ============================================================ */
+ */
 int kernel_interrupt_handler(int codigo, int operando) {
   char msg[256];
 
   switch (codigo) {
 
-    /* ── Código 0: Llamada al sistema inválida ──────────────── */
+    /* Código 0: Llamada al sistema inválida */
     case INT_INVALID_SYSCALL:
       snprintf(msg, sizeof(msg),
                "KERNEL: Syscall inválida (operando=%d) en PID=%d. Ignorando.",
@@ -248,7 +248,7 @@ int kernel_interrupt_handler(int codigo, int operando) {
       printf(ANSI_FG_B_MAGENTA "[KERNEL]" ANSI_RESET " Syscall inválida ignorada para PID=%d\n", current_pid);
       return 0; /* No manejado: dejar que la ISR en RAM ejecute RETRN */
 
-    /* ── Código 1: Código de interrupción inválido ─────────── */
+    /* Código 1: Código de interrupción inválido */
     case INT_INVALID_INT:
       snprintf(msg, sizeof(msg),
                "KERNEL: Código de interrupción inválido recibido. PID=%d.",
@@ -257,8 +257,8 @@ int kernel_interrupt_handler(int codigo, int operando) {
       printf(ANSI_FG_B_MAGENTA "[KERNEL]" ANSI_RESET " Interrupción inválida ignorada.\n");
       return 0; /* No manejado: RETRN restaurará el contexto */
 
-    /* ── Código 2: Llamada al sistema (SVC) ────────────────── */
-    /* ABI de Syscalls (inspirado en Paccaneglla):
+    /* Código 2: Llamada al sistema (SVC) */
+    /* ABI de Syscalls:
      *   - El CÓDIGO de la syscall viene en el AC del usuario.
      *   - Los PARÁMETROS se leen del stack con kernel_pop_stack().
      *
@@ -280,7 +280,7 @@ int kernel_interrupt_handler(int codigo, int operando) {
 
       switch (syscall_code) {
 
-      case 1: /* ── termina_prog(estado) ─────────────────────── */
+      case 1: /* termina_prog(estado) */
           /* El programa puso un código de estado en el stack
            * con PSH antes de llamar a SVC. Lo leemos. */
           kernel_pop_stack(current_pid, &param);
@@ -293,7 +293,7 @@ int kernel_interrupt_handler(int codigo, int operando) {
           scheduler_handle_terminate();
           return 1; /* Manejado: proceso eliminado */
 
-      case 2: /* ── imprime_pantalla(valor) ──────────────────── */
+      case 2: /* imprime_pantalla(valor) */
           /* El programa puso el valor a imprimir en el stack. */
           kernel_pop_stack(current_pid, &param);
           snprintf(msg, sizeof(msg),
@@ -303,7 +303,7 @@ int kernel_interrupt_handler(int codigo, int operando) {
           printf("\n" ANSI_FG_B_GREEN "[PANTALLA PID=%d]:" ANSI_RESET " %d\n", current_pid, param);
           return 0; /* No manejado: RETRN restaurará contexto */
 
-      case 3: { /* ── leer_pantalla() ────────────────────────── */
+      case 3: { /* leer_pantalla() */
           /* Leemos un entero del teclado y lo dejamos en el AC
            * del usuario para que lo encuentre al volver. */
           printf("\n" ANSI_FG_B_GREEN "[ENTRADA PID=%d]:" ANSI_RESET " Ingrese un valor: ", current_pid);
@@ -314,8 +314,7 @@ int kernel_interrupt_handler(int codigo, int operando) {
               while (getchar() != '\n');
           }
 
-          /* Estrategia: salvamos contexto de la pila del sistema
-           * al PCB, modificamos el AC en el PCB, y restauramos
+          /* Salvamos contexto de la pila del sistema al PCB, modificamos el AC en el PCB, y restauramos
            * el contexto de vuelta a la CPU. */
           process_save_context_from_interrupt(current_pid);
           process_table[current_pid].ctx.ac_sign  = (input_val < 0) ? 1 : 0;
@@ -330,7 +329,7 @@ int kernel_interrupt_handler(int codigo, int operando) {
           return 1; /* Manejado: ya restauramos contexto nosotros */
       }
 
-      case 4: /* ── dormir(tics) ─────────────────────────────── */
+      case 4: /* dormir(tics) */
           /* El programa puso la duración en el stack. */
           kernel_pop_stack(current_pid, &param);
           if (param <= 0) param = 1; /* Mínimo 1 tic */
@@ -352,14 +351,14 @@ int kernel_interrupt_handler(int codigo, int operando) {
       }
     }
 
-    /* ── Código 3: Interrupción de reloj ───────────────────── */
+    /* Código 3: Interrupción de reloj */
     case INT_CLOCK:
       snprintf(msg, sizeof(msg),
                "KERNEL: Tick de reloj (system_ticks=%d).", system_ticks);
       escribir_log(msg);
       return 0; /* No manejado: RETRN restaurará contexto */
 
-    /* ── Código 4: Fin de Entrada/Salida (DMA completado) ─── */
+    /* Código 4: Fin de Entrada/Salida (DMA completado) */
     case INT_IO_COMPLETE:
       snprintf(msg, sizeof(msg),
                "KERNEL: DMA completado. Transferencia E/S finalizada (PID=%d).",
@@ -368,7 +367,7 @@ int kernel_interrupt_handler(int codigo, int operando) {
       printf("[KERNEL] DMA completado para PID=%d\n", current_pid);
       return 0; /* No manejado: RETRN restaurará contexto */
 
-    /* ── Códigos 5,6: Errores fatales (instrucción/dirección) ── */
+    /* Códigos 5,6: Errores fatales (instrucción/dirección) */
     case INT_INVALID_INST:
     case INT_INVALID_ADDR:
       if (current_pid == -1) return 0;
@@ -381,7 +380,7 @@ int kernel_interrupt_handler(int codigo, int operando) {
       scheduler_handle_terminate();
       return 1; /* Manejado: proceso ya terminado */
 
-    /* ── Códigos 7,8: Errores aritméticos (underflow/overflow) ── */
+    /* Códigos 7,8: Errores aritméticos (underflow/overflow) */
     case INT_UNDERFLOW:
     case INT_OVERFLOW:
       if (current_pid == -1) return 0;
@@ -397,7 +396,7 @@ int kernel_interrupt_handler(int codigo, int operando) {
       scheduler_handle_terminate();
       return 1; /* Manejado: proceso ya terminado */
 
-    /* ── Default: interrupción desconocida ──────────────────── */
+    /* Default: interrupción desconocida */
     default:
       snprintf(msg, sizeof(msg),
                "KERNEL: Interrupción desconocida (código=%d). Ignorando.",

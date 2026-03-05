@@ -1,5 +1,5 @@
 /*
- * scheduler.h — Interfaz del Planificador Round-Robin (Fase 2)
+ * scheduler.h — Interfaz del Planificador Round-Robin
  */
 
 #ifndef SCHEDULER_H

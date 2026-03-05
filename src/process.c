@@ -10,15 +10,15 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ============================================================
+/* 
  * DEFINICIÓN DE VARIABLES GLOBALES
- * ============================================================ */
+*/
 PCB_t process_table[MAX_PROCESSES];
 int   current_pid   = -1;
 int   system_ticks  =  0;
 int   partition_bitmap[NUM_PARTITIONS];
 
-/* NUEVO: Estructura original para la Cola de Listos (Ready Queue) */
+/* Estructura para la Cola de Listos (Ready Queue) */
 typedef struct {
     int pids[MAX_PROCESSES];
     int head;
@@ -51,11 +51,12 @@ int process_dequeue_ready(void) {
  * Cada proceso ocupa hasta PARTITION_SIZE palabras en DISK[].
  * Proceso 0 → DISK[0..339], proceso 1 → DISK[340..679], etc.
  * Se usa el pid * PARTITION_SIZE como offset.
- * (Simple y sin riesgo de colisión con la lógica DMA de architecture.c) */
+ * (Simple y sin riesgo de colisión con la lógica DMA de architecture.c) 
+ */
 
-/* ============================================================
+/* 
  * INICIALIZACIÓN
- * ============================================================ */
+ */
 void process_init(void) {
     for (int i = 0; i < MAX_PROCESSES; i++) {
         process_table[i].pid              = -1;
@@ -92,9 +93,9 @@ void process_init(void) {
     }
 }
 
-/* ============================================================
+/* 
  * UTILIDADES
- * ============================================================ */
+ */
 const char *state_to_string(ProcessState s) {
     switch (s) {
         case STATE_NEW:        return "NUEVO";
@@ -106,9 +107,9 @@ const char *state_to_string(ProcessState s) {
     }
 }
 
-/* ============================================================
+/* 
  * CAMBIO DE ESTADO — registra SIEMPRE en log.txt
- * ============================================================ */
+ */
 void process_change_state(int pid, ProcessState new_state) {
     if (pid < 0 || pid >= MAX_PROCESSES) return;
 
@@ -136,9 +137,9 @@ void process_change_state(int pid, ProcessState new_state) {
             state_to_string(new_state));
 }
 
-/* ============================================================
+/* 
  * PARTICIONES DE MEMORIA
- * ============================================================ */
+ */
 int process_find_partition(void) {
     for (int i = 0; i < NUM_PARTITIONS; i++) {
         if (partition_bitmap[i] == 0)
@@ -158,9 +159,9 @@ void process_free_partition(int pid) {
     }
 }
 
-/* ============================================================
+/* 
  * CARGA DEL PROCESO DESDE DISCO A RAM
- * ============================================================ */
+ */
 void process_load_to_ram(int pid) {
     if (pid < 0 || pid >= MAX_PROCESSES) return;
     PCB_t *p = &process_table[pid];
@@ -178,13 +179,14 @@ void process_load_to_ram(int pid) {
     escribir_log(msg);
 }
 
-/* ============================================================
+/* 
  * CREACIÓN DE PROCESO
  *  - Lee archivo de texto
  *  - Almacena instrucciones en DISK[]
  *  - Crea PCB en estado NEW
  *  Retorna PID o -1 si error
- * ============================================================ */
+ */
+
 int process_create(const char *filename, const char *name) {
     /* 1. Buscar slot libre en la tabla (máx. 20) */
     int slot = -1;
@@ -335,9 +337,9 @@ int process_create(const char *filename, const char *name) {
     return slot;
 }
 
-/* ============================================================
+/* 
  * SALVAR CONTEXTO: CPU → PCB
- * ============================================================ */
+ */
 void process_save_context(int pid) {
     if (pid < 0 || pid >= MAX_PROCESSES) return;
     PCB_t *p = &process_table[pid];
@@ -363,7 +365,7 @@ void process_save_context(int pid) {
     }
 }
 
-/* ============================================================
+/* 
  * SALVAR CONTEXTO DESDE INTERRUPCIÓN: Pila del Sistema → PCB
  *
  * Cuando lanzarInterrupcion() guarda el contexto del usuario en la
@@ -374,7 +376,7 @@ void process_save_context(int pid) {
  *
  * Orden de Push (en lanzarInterrupcion): PC, AC, RX, RB, RL, CC, Mode
  * Orden de Pop (inverso):                Mode, CC, RL, RB, RX, AC, PC
- * ============================================================ */
+ */
 void process_save_context_from_interrupt(int pid) {
     if (pid < 0 || pid >= MAX_PROCESSES) return;
     PCB_t *p = &process_table[pid];
@@ -396,9 +398,9 @@ void process_save_context_from_interrupt(int pid) {
     p->ctx.interrupt = 1;
 }
 
-/* ============================================================
+/* 
  * RESTAURAR CONTEXTO: PCB → CPU
- * ============================================================ */
+ */
 void process_load_context(int pid) {
     if (pid < 0 || pid >= MAX_PROCESSES) return;
     PCB_t *p = &process_table[pid];
@@ -426,9 +428,9 @@ void process_load_context(int pid) {
     cpu.halted        = 0;
 }
 
-/* ============================================================
+/* 
  * IMPRIMIR TABLA DE PROCESOS (comando 'ps')
- * ============================================================ */
+ */
 void process_print_table(void) {
     printf(ANSI_FG_B_BLUE "\n=== TABLA DE PROCESOS (tick=%d) ===\n" ANSI_RESET, system_ticks);
     printf(ANSI_FG_CYAN "%-4s %-20s %-14s %-6s %-6s %-6s %-5s\n" ANSI_RESET,
@@ -456,19 +458,18 @@ void process_print_table(void) {
     printf("====================================\n\n");
 }
 
-/* ============================================================
+/* 
  * KERNEL POP STACK — Lee un parámetro de la pila del usuario
  *
  * Durante una interrupción (estamos en Modo Kernel), no podemos
  * usar leerMemoria() porque la MMU traduce diferente en Kernel.
  * Accedemos directamente a la dirección física: base + sp.
  *
- * Inspirado en el diseño de Paccaneglla: encapsula el acceso
- * al stack del proceso sin tocar los registros reales de la CPU
+ * encapsula el acceso al stack del proceso sin tocar los registros reales de la CPU
  * más allá de SP.
  *
  * Retorna 0 si éxito, -1 si error.
- * ============================================================ */
+ */
 int kernel_pop_stack(int pid, int *value) {
     if (pid < 0 || pid >= MAX_PROCESSES) return -1;
 
@@ -488,5 +489,5 @@ int kernel_pop_stack(int pid, int *value) {
     /* Actualizar SP del proceso (pop = mover SP hacia arriba) */
     cpu.stack.sp++;
 
-    return 0; /* Éxito */
+    return 0; 
 }

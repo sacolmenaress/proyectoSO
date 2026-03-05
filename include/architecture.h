@@ -55,11 +55,11 @@
 // Transferencia de datos (04-07)
 #define OPC_LOAD   4   // LOAD:   AC = operando
 #define OPC_STORE  5   // STR:    M[operando] = AC
-#define OPC_LOADRX 6   // LOADRX: RX = operando          [NUEVO]
-#define OPC_STRRX  7   // STRRX:  M[operando] = RX       [NUEVO]
+#define OPC_LOADRX 6   // LOADRX: RX = operando          
+#define OPC_STRRX  7   // STRRX:  M[operando] = RX       
 
 // Comparación (08)
-#define OPC_COMP 8   // COMP: Compara AC con operando, actualiza CC  [NUEVO]
+#define OPC_COMP 8   // COMP: Compara AC con operando, actualiza CC  
 
 // Saltos condicionales (09-12) — comparan AC con operando
 #define OPC_JEQ  9   // JMPE:  salta si AC == operando
@@ -70,18 +70,18 @@
 // Sistema (13-18)
 #define OPC_SVC   13  // SVC:   Llamada al sistema
 #define OPC_RETRN 14  // RETRN: Retorno de interrupción
-#define OPC_HAB   15  // HAB:   Habilitar interrupciones  [NUEVO]
-#define OPC_DHAB  16  // DHAB:  Deshabilitar interrupciones [NUEVO]
-#define OPC_TTI   17  // TTI:   Timer Tick Interrupt      [NUEVO]
-#define OPC_CHMOD 18  // CHMOD: Cambiar modo (User/Kernel) [NUEVO]
+#define OPC_HAB   15  // HAB:   Habilitar interrupciones  
+#define OPC_DHAB  16  // DHAB:  Deshabilitar interrupciones 
+#define OPC_TTI   17  // TTI:   Timer Tick Interrupt      
+#define OPC_CHMOD 18  // CHMOD: Cambiar modo (User/Kernel) 
 
 // Registros Base/Límite (19-24)
 #define OPC_LOADRB 19  // LOADRB: RB = operando
 #define OPC_STRRB  20  // STRRB:  M[operando] = RB
 #define OPC_LOADRL 21  // LOADRL: RL = operando
 #define OPC_STRRL  22  // STRRL:  M[operando] = RL
-#define OPC_LOADSP 23  // LOADSP: SP = operando           [NUEVO]
-#define OPC_STRSP  24  // STRSP:  M[operando] = SP        [NUEVO]
+#define OPC_LOADSP 23  // LOADSP: SP = operando           
+#define OPC_STRSP  24  // STRSP:  M[operando] = SP      
 
 // Stack (25-26)
 #define OPC_PSH 25  // PSH: Push AC a la pila
@@ -202,7 +202,7 @@ int sysPop(int *valor);
 
 /* Hook para que el hardware notifique al Kernel de C sobre una interrupción.
  * Retorna 1 si el kernel manejó la interrupción (no ejecutar RETRN).
- * Retorna 0 si no la manejó (seguir flujo normal con handler de RAM). */
+ * Retorna 0 si no la manejó (segue el flujo normal con handler de RAM). */
 int kernel_interrupt_handler(int codigo, int operando);
 
 #endif

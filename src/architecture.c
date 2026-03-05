@@ -51,11 +51,10 @@ static const char *INT_DESCRIPTIONS[] = {
  * Imprime mensaje en salida estándar Y en log
  * Salvaguarda registros y salta al manejador
  */
-// ──────────────────────────────────────────────────────────────
+
 // Pila del Sistema (RAM[30-299], crece hacia abajo)
-// Usada SOLO por el kernel para guardar/restaurar contexto
-// en interrupciones.  No pasa por MMU (acceso directo a RAM).
-// ──────────────────────────────────────────────────────────────
+// Usada solo por el kernel para guardar/restaurar contexto en interrupciones.  No pasa por MMU (acceso directo a RAM).
+
 int sysPush(int valor) {
   cpu.system_sp--;
   if (cpu.system_sp < OS_STACK_BOTTOM) {
@@ -94,7 +93,7 @@ void lanzarInterrupcion(int codigo) {
           INT_DESCRIPTIONS[codigo]);
   escribir_log(mensaje);
 
-  // 1. GUARDAR CONTEXTO en la pila del sistema (7 registros)
+  // 1. Guardar contexto en la pila del sistema (7 registros)
   //    Orden: PC, AC, RX, RB, RL, CC, Mode
   //    (RETRN los restaura en orden inverso)
   sysPush(cpu.PSW.pc);
@@ -109,7 +108,7 @@ void lanzarInterrupcion(int codigo) {
   cpu.PSW.mode = MODE_KERNEL;
   cpu.PSW.interrupt = 0;
 
-  // 3. Notificar al Kernel de C (NUEVO: Conexión Fase 2)
+  // 3. Notificar al Kernel de C, agregado para esta fase del proyecto
   int handled = kernel_interrupt_handler(codigo, cpu.IR.operand);
   if (handled) {
     /* El kernel ya consumió la pila del sistema y salvó el contexto.
@@ -154,7 +153,7 @@ void incrementarPC() {
   }
 }
 
-/**
+/*
  * Lee una palabra de memoria con protección y arbitraje de bus
  * @param direccion Dirección LÓGICA (el programa usa 0, 1, 50, etc.)
  * @param w Puntero donde se almacenará la palabra leída
@@ -167,6 +166,7 @@ void incrementarPC() {
  * Previene condiciones de competencia CPU/DMA
  * Protección de memoria con RB/RL en modo USER
  */
+
 int leerMemoria(int direccion, Word *w) {
   // ARBITRAJE DE BUS: Adquirir mutex
   pthread_mutex_lock(&bus_mutex);
@@ -214,6 +214,7 @@ int leerMemoria(int direccion, Word *w) {
  * Previene condiciones de competencia CPU/DMA
  * Protección de memoria con RB/RL en modo USER
  */
+
 int escribirMemoria(int direccion, Word w) {
   // ARBITRAJE DE BUS: Adquirir mutex
   pthread_mutex_lock(&bus_mutex);
@@ -289,6 +290,7 @@ void inicializarVectorInterrupciones() {
  * Esta función debe llamarse DESPUÉS de inicializarMemoria() para que
  * los valores no sean sobreescritos por la limpieza de RAM.
  */
+
 void inicializarAreaSO() {
   // Nombres de las ISRs para log/debug
   static const char *ISR_NAMES[] = {
@@ -460,10 +462,8 @@ void actualizarCodCond(long long resultado) {
 void decodeExecute() {
   switch (cpu.IR.opcode) {
 
-  // ============================================================
-  // ARITMÉTICAS (00-03)
-  // ============================================================
 
+  // ARITMÉTICAS (00-03)
   case OPC_ADD: { // 00 - SUM: AC = AC + operando
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     int ok;
@@ -528,10 +528,8 @@ void decodeExecute() {
     break;
   }
 
-  // ============================================================
-  // TRANSFERENCIA DE DATOS (04-07)
-  // ============================================================
 
+  // TRANSFERENCIA DE DATOS (04-07)
   case OPC_LOAD: { // 04 - LOAD: AC = operando
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     int ok;
@@ -559,7 +557,7 @@ void decodeExecute() {
     break;
   }
 
-  case OPC_LOADRX: { // 06 - LOADRX: RX = operando [NUEVO]
+  case OPC_LOADRX: { // 06 - LOADRX: RX = operando
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     int ok;
     int valor = obtenerOperando(&ok);
@@ -571,7 +569,7 @@ void decodeExecute() {
     break;
   }
 
-  case OPC_STRRX: { // 07 - STRRX: M[operando] = RX [NUEVO]
+  case OPC_STRRX: { // 07 - STRRX: M[operando] = RX
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     int dirDestino = 0;
     if (cpu.IR.addressing == ADDR_DIRECT) {
@@ -589,10 +587,8 @@ void decodeExecute() {
     break;
   }
 
-  // ============================================================
-  // COMPARACIÓN (08)
-  // ============================================================
 
+  // COMPARACIÓN (08)
   case OPC_COMP: { // 08 - COMP: Compara AC con operando
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     int ok;
@@ -606,10 +602,8 @@ void decodeExecute() {
     break;
   }
 
-  // ============================================================
-  // SALTOS CONDICIONALES (09-12)
-  // ============================================================
 
+  // SALTOS CONDICIONALES (09-12)
   case OPC_JEQ: { // 09 - JMPE: salta si AC == M[SP]
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     Word stackWord;
@@ -678,10 +672,8 @@ void decodeExecute() {
     break;
   }
 
-  // ============================================================
-  // SISTEMA (13-18)
-  // ============================================================
 
+  // SISTEMA (13-18)
   case OPC_SVC: { // 13 - Llamada al sistema
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     lanzarInterrupcion(INT_SYSCALL);
@@ -714,7 +706,7 @@ void decodeExecute() {
     break;
   }
 
-  case OPC_HAB: { // 15 - Habilitar interrupciones [NUEVO]
+  case OPC_HAB: { // 15 - Habilitar interrupciones
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     cpu.PSW.interrupt = 1;
     printf("Interrupciones HABILITADAS\n");
@@ -722,7 +714,7 @@ void decodeExecute() {
     break;
   }
 
-  case OPC_DHAB: { // 16 - Deshabilitar interrupciones [NUEVO]
+  case OPC_DHAB: { // 16 - Deshabilitar interrupciones
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     cpu.PSW.interrupt = 0;
     printf("Interrupciones DESHABILITADAS\n");
@@ -743,7 +735,7 @@ void decodeExecute() {
     break;
   }
 
-  case OPC_CHMOD: { // 18 - Cambiar modo [NUEVO]
+  case OPC_CHMOD: { // 18 - Cambiar modo
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     if (cpu.PSW.mode == MODE_USER) {
       printf("ERROR: Intento de CHMOD en Modo Usuario.\n");
@@ -765,10 +757,8 @@ void decodeExecute() {
     break;
   }
 
-  // ============================================================
-  // REGISTROS BASE/LÍMITE/PILA (19-24)
-  // ============================================================
 
+  // REGISTROS BASE/LÍMITE/PILA (19-24)
   case OPC_LOADRB: { // 19 - LOADRB: RB = operando
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     int ok;
@@ -823,7 +813,7 @@ void decodeExecute() {
     break;
   }
 
-  case OPC_LOADSP: { // 23 - LOADSP: SP = operando [NUEVO]
+  case OPC_LOADSP: { // 23 - LOADSP: SP = operando
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     int ok;
     int valor = obtenerOperando(&ok);
@@ -835,7 +825,7 @@ void decodeExecute() {
     break;
   }
 
-  case OPC_STRSP: { // 24 - STRSP: M[operando] = SP [NUEVO]
+  case OPC_STRSP: { // 24 - STRSP: M[operando] = SP
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     int dirDestino = 0;
     if (cpu.IR.addressing == ADDR_DIRECT) {
@@ -850,10 +840,8 @@ void decodeExecute() {
     break;
   }
 
-  // ============================================================
-  // STACK (25-26)
-  // ============================================================
 
+  // STACK (25-26)
   case OPC_PSH: { // 25 - Push operando a la pila
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     
@@ -899,10 +887,8 @@ void decodeExecute() {
     break;
   }
 
-  // ============================================================
-  // SALTO INCONDICIONAL (27)
-  // ============================================================
 
+  // SALTO INCONDICIONAL (27)
   case OPC_J: { // 27 - Salto incondicional
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     int target = cpu.IR.operand;
@@ -914,10 +900,8 @@ void decodeExecute() {
     break;
   }
 
-  // ============================================================
-  // DMA (28-33)
-  // ============================================================
 
+  // DMA (28-33)
   case OPC_SDMAP: // 28
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     cpu.dma.track = cpu.IR.operand;
@@ -956,10 +940,8 @@ void decodeExecute() {
     break;
   }
 
-  // ============================================================
-  // HALT (99)
-  // ============================================================
 
+  // HALT (99)
   case OPC_HALT: { // 99 - Parada
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     printf("--- HALT instruction executed. CPU stopped. ---\n");

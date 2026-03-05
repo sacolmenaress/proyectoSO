@@ -1,7 +1,7 @@
 #include "architecture.h"
 #include "log.h"
-#include "process.h"    /* Fase 2: gestión de procesos */
-#include "scheduler.h"  /* Fase 2: planificador Round-Robin */
+#include "process.h"    // Gestión de procesos
+#include "scheduler.h"  // Planificador Round-Robin
 #include "console_colors.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,10 +24,10 @@ void command_help() {
 }
 
 // Función para cargar programa desde archivo
-// Fase 2: ahora crea un proceso (PCB) en la tabla de procesos
+// Ahora crea un proceso (PCB) en la tabla de procesos
 void command_load(const char *filename) {
-  /* --- Fase 2: Crear proceso via subsistema de procesos --- */
-  /* Extraer nombre base del archivo para usarlo como nombre del proceso */
+  // Crea proceso via subsistema de procesos
+  //Extraer nombre base del archivo para usarlo como nombre del proceso
   char procname[64];
   const char *slash = filename;
   for (const char *p = filename; *p; p++)
@@ -103,7 +103,7 @@ void command_reg() {
 }
 
 void command_step() {
-  /* --- Fase 2: si hay procesos activos, usar el scheduler --- */
+  // Si hay procesos activos, usar el scheduler
   int hay_procesos = 0;
   for (int i = 0; i < MAX_PROCESSES; i++) {
     if (process_table[i].pid != -1 &&
@@ -149,7 +149,7 @@ void command_step() {
     }
   }
 
-  // Decodificar y mostrar instrucción ANTES de ejecutar
+  // Decodificar y mostrar instrucción antes de ejecutar
   printf("\n==== Modo Debugger (tick=%d, PID=%d) ====\n",
          system_ticks, current_pid);
   printf("Dirección física: %d\n", cpu.mp.base + cpu.PSW.pc);
@@ -197,9 +197,9 @@ void command_step() {
 
 
 void command_run() {
-  /* === Fase 2: Ejecutar con planificador Round-Robin ===
+  /* Ejecutar con planificador Round-Robin
    * Si hay procesos en la tabla, usamos el scheduler.
-   * Si no hay ninguno, caemos al modo Fase 1 (compatibilidad). */
+   * Si no hay ninguno, caemos en el modo Fase 1. */
 
   /* Verificar si hay algún proceso activo (NEW, READY, RUNNING, SLEEPING) */
   int hay_procesos = 0;
@@ -212,7 +212,7 @@ void command_run() {
   }
 
   if (hay_procesos) {
-    /* --- Modo Fase 2: planificador Round-Robin --- */
+    /* Modo Fase 2: planificador Round-Robin*/
     printf("Ejecutando con planificador Round-Robin (quantum=%d)...\n",
            PROCESS_QUANTUM);
     printf("Presione Ctrl+C para abortar la ejecución.\n");
@@ -281,7 +281,7 @@ void command_run() {
       printf("Ejecucion detenida: limite de ciclos (%d) alcanzado.\n", max_cycles);
 
   } else {
-    /* --- Modo Fase 1 (compatibilidad): sin procesos en tabla --- */
+    /*Modo Fase 1 (compatibilidad): sin procesos en tabla */
     printf("Ejecutando programa (modo directo)...\n");
     int max_cycles = 1000;
     int cycles = 0;
@@ -305,12 +305,12 @@ void command_run() {
   printf("Ejecucion finalizada.\n");
 }
 
-/* === Fase 2: Comando ps === */
+/* Comando ps */
 void command_ps(void) {
   process_print_table();
 }
 
-/* === Fase 2: Comando memestat === */
+/* Comando memestat */
 void command_memestat(void) {
     printf("\n=== Mapa de Memoria (RAM_SIZE=%d) ===\n", RAM_SIZE);
     printf("  [0 - %d] : Sistema Operativo (%d palabras ocupadas)\n", OS_RESERVED - 1, OS_RESERVED);
@@ -339,7 +339,7 @@ int main() {
 
   abrir_log();
   inicializarCPU();
-  process_init(); /* Fase 2: inicializar tabla de procesos */
+  process_init(); /* Inicializar tabla de procesos */
   inicializarDMAThread();
 
   CLEAR_SCREEN();
@@ -371,7 +371,7 @@ int main() {
     } else if (strcmp(cmd, "help") == 0) {
       command_help();
     } else if (strcmp(cmd, "ejecutar") == 0) {
-      /* === cargar + ejecutar en un solo paso === */
+      /* cargar + ejecutar en un solo paso*/
       arg1 = strtok(NULL, " ");
       if (!arg1) {
         printf("Uso: ejecutar <prog1.txt> [prog2.txt] ...\n");

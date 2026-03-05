@@ -10,9 +10,9 @@
 #include "architecture.h"   /* CPU_t, Word, RAM_SIZE, OS_RESERVED, etc. */
 #include <stdlib.h>
 
-/* ============================================================
+/* 
  * CONSTANTES
- * ============================================================ */
+ */
 #define MAX_PROCESSES   20      /* Máximo de procesos simultáneos */
 #define PROCESS_QUANTUM  2      /* Quantum del planificador Round-Robin */
 
@@ -22,9 +22,9 @@
 #define NUM_PARTITIONS   5
 #define PARTITION_SIZE   340    /* palabras por partición */
 
-/* ============================================================
+/* 
  * ESTADOS DEL PROCESO
- * ============================================================ */
+ */
 typedef enum {
     STATE_NEW        = 0,   /* Recién creado, en disco, no en RAM */
     STATE_READY      = 1,   /* En RAM, esperando CPU              */
@@ -33,12 +33,12 @@ typedef enum {
     STATE_TERMINATED = 4    /* Finalizó o fue cancelado           */
 } ProcessState;
 
-/* ============================================================
+/* 
  * CONTEXTO SALVADO DEL PROCESO
  *
  * Snapshot de los campos de CPU_t que pertenecen al usuario.
  * Se copia hacia/desde la CPU global en cada cambio de contexto.
- * ============================================================ */
+ */
 typedef struct {
     /* Registro acumulador (signo y magnitud separados) */
     int    ac_sign;
@@ -54,14 +54,12 @@ typedef struct {
     int    rl;
     /* Código de condición */
     int    condition;
-    /* NUEVO: Modo de la CPU (Kernel/User) y estado de interrupciones */
+    /* Modo de la CPU (Kernel/User) y estado de interrupciones */
     int    mode;
     int    interrupt;
 } ProcessContext_t;
 
-/* ============================================================
- * PCB — BLOQUE DE CONTROL DE PROCESO
- * ============================================================ */
+/*  — BLOQUE DE CONTROL DE PROCESO */
 typedef struct {
     int              pid;           /* ID del proceso (0-19)           */
     char             name[64];      /* Nombre del programa             */
@@ -90,18 +88,14 @@ typedef struct {
     Word             saved_system_stack[20]; /* Suficiente para 2 contextos anidados */
 } PCB_t;
 
-/* ============================================================
- * VARIABLES GLOBALES (definidas en process.c)
- * ============================================================ */
+/* VARIABLES GLOBALES (definidas en process.c) */
 extern PCB_t process_table[MAX_PROCESSES];
 extern int   current_pid;           /* PID en CPU; -1 si ninguno   */
 extern int   system_ticks;          /* Reloj global del sistema     */
 extern int   partition_bitmap[NUM_PARTITIONS]; /* 0=libre, 1=ocupada */
 
-/* ============================================================
- * PROTOTIPOS
- * ============================================================ */
 
+/* PROTOTIPOS */
 /* Inicializa la tabla de procesos y bitmaps */
 void process_init(void);
 
@@ -134,7 +128,7 @@ void process_load_to_ram(int pid);
 /* Convierte estado a string (para log) */
 const char *state_to_string(ProcessState s);
 
-/* NUEVO: Gestión de la Cola de Listos (Ready Queue) de forma original */
+/* Gestión de la Cola de Listos (Ready Queue) de forma original */
 void process_enqueue_ready(int pid);
 int  process_dequeue_ready(void);
 
