@@ -175,8 +175,9 @@ typedef struct {
   DMA_t dma;
   int halted;
   int system_sp;       // Stack pointer del sistema (pila en RAM[30-299], crece hacia abajo)
-  int timer_limit;     // Intervalo del timer (cada cuántos ciclos interrumpe, 0=desactivado)
-  int timer_counter;   // Contador de ciclos actual del timer
+  int timer_limit;     // Intervalo del timer TTI (cada cuántos ciclos interrumpe, 0=desactivado)
+  int timer_counter;   // Contador de ciclos actual del timer TTI
+  int quantum_counter; // Contador automático para quantum Round-Robin (siempre activo)
 } CPU_t;
 
 // Variables Globales
@@ -187,6 +188,8 @@ extern int vectorInterrupciones[INTERRUPT_VECTOR_SIZE];
 extern pthread_mutex_t bus_mutex;  // Mutex POSIX para arbitraje de bus
 extern pthread_cond_t  dma_cond;   // Condición para despertar hilo DMA
 extern pthread_t       dma_thread; // Hilo del DMA
+extern int cpu_running;            // Flag: 1 = CPU thread activo, 0 = detenido
+extern pthread_t cpu_thread;       // Hilo de fondo de la CPU
 
 // Prototipos
 void inicializarCPU(void);

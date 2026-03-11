@@ -15,6 +15,7 @@
  */
 #define MAX_PROCESSES   20      /* Máximo de procesos simultáneos */
 #define PROCESS_QUANTUM  2      /* Quantum del planificador Round-Robin */
+#define MAX_INST_PER_PROCESS 10000 /* Máx instrucciones por proceso (protección anti-loop) */
 
 /* Tamaño de cada partición de memoria de usuario.
  * Espacio usuario: RAM[300..1999] = 1700 palabras.
@@ -80,6 +81,7 @@ typedef struct {
     /* Planificación */
     int              quantum_counter; /* Ticks consumidos en el turno actual */
     int              wake_tick;       /* Tick en que debe despertar (SLEEPING)*/
+    int              inst_count;      /* Instrucciones totales ejecutadas */
 
     /* Persistencia de la Pila del Sistema —
      * Cada proceso guarda su propia copia de la pila del sistema

@@ -127,10 +127,14 @@ void lanzarInterrupcion(int codigo) {
     escribir_log(log_isr);
     cpu.PSW.pc = handler;  // Siguiente fetch leerá la ISR (RETRN)
   } else {
-    printf("No hay manejador configurado para esta interrupción.\n");
+    if (!cpu_running) {
+        printf("No hay manejador configurado para esta interrupción.\n");
+    }
     if (codigo == INT_INVALID_ADDR || codigo == INT_INVALID_INST ||
         codigo == INT_INVALID_INT) {
-      printf("Error crítico. Deteniendo CPU.\n");
+      if (!cpu_running) {
+          printf("Error crítico. Deteniendo CPU.\n");
+      }
       cpu.halted = 1;
     }
   }
@@ -360,9 +364,11 @@ void inicializarCPU() {
   cpu.dma.mem_addr = 0;
   cpu.dma.status = 0;
 
-  // Inicializar Timer (0 = desactivado hasta que TTI lo configure)
+  // Inicializar Timer TTI (0 = desactivado hasta que TTI lo configure)
   cpu.timer_limit = 0;
   cpu.timer_counter = 0;
+  // Timer automático para quantum RR (siempre activo)
+  cpu.quantum_counter = 0;
 
   // Inicializar Componentes
   inicializarMemoria();
@@ -724,13 +730,12 @@ void decodeExecute() {
 
   case OPC_TTI: { // 17 - Timer: establece intervalo del reloj
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
-    int ok;
-    int valor = obtenerOperando(&ok);
-    if (ok) {
-      cpu.timer_limit = valor;
-      cpu.timer_counter = 0;
-      printf("TTI: Timer configurado cada %d ciclos\n", valor);
-    }
+    /* TTI siempre usa el campo operand directamente (modo inmediato implicito).
+     * Los archivos de casos de prueba codifican "17000020" con addressing=0 pero
+     * se programara el timer con el valor literal 20, no leer RAM[20]. */
+    cpu.timer_limit = cpu.IR.operand;
+    cpu.timer_counter = 0;
+    printf("TTI: Timer configurado cada %d ciclos\n", cpu.IR.operand);
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
     break;
   }
@@ -842,36 +847,35 @@ void decodeExecute() {
 
 
   // STACK (25-26)
-  case OPC_PSH: { // 25 - Push operando a la pila
+  case OPC_PSH: { // 25 - Push AC a la pila
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     
-    int ok;
-    int valor_a_empilar = obtenerOperando(&ok);
-    
-    if (ok) {
-        // Verificar stack overflow: SP no puede bajar hasta pisar el código del programa
-        int code_limit = 0;
-        if (current_pid >= 0 && current_pid < MAX_PROCESSES) {
-          code_limit = process_table[current_pid].prog_size;
-        }
-        if (cpu.stack.sp - 1 < code_limit) {
-          printf("ERROR PSH: Stack Overflow (SP=%d pisaría el código que termina en %d)\n",
-                 cpu.stack.sp, code_limit);
-          lanzarInterrupcion(INT_INVALID_ADDR);
-          break;
-        }
-        
-        // Crece hacia abajo: decrementamos primero
-        cpu.stack.sp--;
-        
-        // Convertimos el operando int a tipo Word para guardarlo en la RAM
-        Word dato;
-        asignarValor(&dato, valor_a_empilar);
-        
-        if (!escribirMemoria(cpu.stack.sp, dato)) {
-            cpu.stack.sp++; // Rollback
-        }
+    /* PSH siempre empuja el valor de AC a la pila.
+     * Referencia: Bryan usa  memory_write(SP, AC)  directamente.
+     * ERROR ANTERIOR: se usaba obtenerOperando() que para PSH 25000000
+     * (addressing=0, operand=0) leía leerMemoria(0) = RAM[RB] = primera
+     * instrucción del programa, NO el valor del AC. */
+
+    // Verificar stack overflow: SP no puede bajar hasta pisar el código del programa
+    int code_limit = 0;
+    if (current_pid >= 0 && current_pid < MAX_PROCESSES) {
+      code_limit = process_table[current_pid].prog_size;
     }
+    if (cpu.stack.sp - 1 < code_limit) {
+      printf("ERROR PSH: Stack Overflow (SP=%d pisaría el código que termina en %d)\n",
+             cpu.stack.sp, code_limit);
+      lanzarInterrupcion(INT_INVALID_ADDR);
+      break;
+    }
+    
+    // Crece hacia abajo: decrementamos primero
+    cpu.stack.sp--;
+    
+    // Escribimos AC directamente en la pila
+    if (!escribirMemoria(cpu.stack.sp, cpu.AC)) {
+        cpu.stack.sp++; // Rollback
+    }
+
     log_resultado_instruccion(cpu.AC, cpu.stack.sp, cpu.PSW.condition);
     break;
   }
@@ -965,12 +969,24 @@ void ejecutarInst() {
   fetch();
   decodeExecute();
 
-  // Timer: incrementar contador y generar interrupción de reloj si alcanza el límite
+  // Timer automático de quantum
+  // Cada 2 instrucciones de modo USUARIO se genera INT_CLOCK
+  // sin importar si el programa usó TTI o no.
+  if (cpu.PSW.mode == MODE_USER && cpu.IR.opcode < OPC_HALT) {
+    cpu.quantum_counter++;
+    if (cpu.quantum_counter >= PROCESS_QUANTUM) {
+      cpu.quantum_counter = 0;
+      lanzarInterrupcion(INT_CLOCK);
+    }
+  }
+
+  // Timer TTI (para alarmas de usuario, si el programa lo configuró)
   if (cpu.timer_limit > 0) {
     cpu.timer_counter++;
     if (cpu.timer_counter >= cpu.timer_limit) {
       cpu.timer_counter = 0;
-      lanzarInterrupcion(INT_CLOCK);
+      // Solo lanzar si el quantum no acaba de lanzar INT_CLOCK
+      // (evitar doble interrupción en el mismo ciclo)
     }
   }
 }

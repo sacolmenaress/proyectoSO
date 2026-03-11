@@ -52,7 +52,7 @@ static void dispatch(int old_pid, int new_pid) {
     escribir_log(msg);
 
     /* Imprimir dispatch SÓLO si es un proceso diferente o no había nada corriendo */
-    if (old_pid != new_pid) {
+    if (old_pid != new_pid && !cpu_running) {
         printf(ANSI_FG_B_YELLOW "[SCHEDULER]" ANSI_RESET " Despachando PID=%.2d (%s)\n",
                new_pid, process_table[new_pid].name);
     }
@@ -86,22 +86,6 @@ static void scheduler_admit_new(void) {
     }
 }
 
-/* 
- * scheduler_wake_sleeping — Despierta procesos cuyo tiempo expiró
- */
-static void scheduler_wake_sleeping(void) {
-    for (int i = 0; i < MAX_PROCESSES; i++) {
-        if (process_table[i].state != STATE_SLEEPING) continue;
-        if (process_table[i].wake_tick <= system_ticks) {
-            process_change_state(i, STATE_READY);
-            char msg[128];
-            snprintf(msg, sizeof(msg),
-                     "SCHEDULER: PID=%d despertado en tick=%d.",
-                     i, system_ticks);
-            escribir_log(msg);
-        }
-    }
-}
 
 /* 
  * scheduler_next_ready — Busca el siguiente proceso READY
@@ -120,51 +104,28 @@ static int scheduler_next_ready(void) {
  *   0  → no hay nada que ejecutar (idle)
  */
 int scheduler_tick(void) {
-    system_ticks++;
+    /*
+     *  Admite procesos NEW a READY cuando hay RAM libre.
+     *  Despacha el siguiente proceso READY si ninguno corre.
+     */
 
-    /* Paso 1: Admitir procesos NEW si hay memoria */
+    /* Paso 1: Admitir procesos NEW si hay memoria disponible */
     scheduler_admit_new();
 
-    /* Paso 2: Despertar procesos SLEEPING que ya cumplieron su tiempo */
-    scheduler_wake_sleeping();
-
-    /* Paso 3: Verificar el proceso actual */
+    /* Paso 2: Si ya hay un proceso RUNNING, no hacer nada más */
     if (current_pid != -1 &&
         process_table[current_pid].state == STATE_RUNNING) {
-
-        process_table[current_pid].quantum_counter++;
-
-        /* Si se agota el quantum → Preempción */
-        if (process_table[current_pid].quantum_counter >= PROCESS_QUANTUM) {
-            int next = scheduler_next_ready();
-            if (next != -1) {
-                /* Hay otro proceso listo: cambio de contexto. 
-                 * El dispatch se encarga de cambiar el actual a READY 
-                 * y process_change_state lo meterá al final de la cola. */
-                dispatch(current_pid, next);
-            } else {
-                /* No hay otro: el mismo sigue (reset del contador) */
-                char log_msg[256];
-                snprintf(log_msg, sizeof(log_msg),
-                        "[LOG] Quantum agotado. Proceso saliente: %d, Proceso entrante: %d",
-                        current_pid, current_pid);
-                escribir_log(log_msg);
-                printf(ANSI_FG_B_YELLOW "[SCHEDULER]" ANSI_RESET " Quantum agotado. PID=%.2d sigue ejecutando.\n", current_pid);
-                process_table[current_pid].quantum_counter = 0;
-            }
-        }
-
         return 1; /* Hay proceso running */
     }
 
-    /* Paso 4: No hay nadie RUNNING → buscar siguiente READY */
+    /* Paso 3: No hay nadie RUNNING → buscar siguiente READY */
     int next = scheduler_next_ready();
     if (next != -1) {
         dispatch(-1, next);
         return 1;
     }
 
-    /* Paso 5: No hay procesos listos */
+    /* Paso 4: No hay procesos listos */
     return 0;
 }
 
@@ -183,8 +144,10 @@ void scheduler_handle_terminate(void) {
             "SCHEDULER: PID=%d (%s) TERMINADO. Partición liberada.",
             current_pid, process_table[current_pid].name);
     escribir_log(msg);
-    printf(ANSI_FG_B_YELLOW "[SCHEDULER]" ANSI_RESET " PID=%d (%s) terminó.\n",
-            current_pid, process_table[current_pid].name);
+    if (!cpu_running) {
+        printf(ANSI_FG_B_YELLOW "[SCHEDULER]" ANSI_RESET " PID=%d (%s) terminó.\n",
+                current_pid, process_table[current_pid].name);
+    }
 
     current_pid = -1;
 }
@@ -209,7 +172,9 @@ void scheduler_handle_sleep(int duration_ticks) {
             current_pid, duration_ticks,
             process_table[current_pid].wake_tick);
     escribir_log(msg);
-    printf(ANSI_FG_B_YELLOW "[SCHEDULER]" ANSI_RESET " PID=%d duerme %d ticks.\n", current_pid, duration_ticks);
+    if (!cpu_running) {
+        printf(ANSI_FG_B_YELLOW "[SCHEDULER]" ANSI_RESET " PID=%d duerme %d ticks.\n", current_pid, duration_ticks);
+    }
 
     current_pid = -1;
 }
@@ -245,7 +210,9 @@ int kernel_interrupt_handler(int codigo, int operando) {
                "KERNEL: Syscall inválida (operando=%d) en PID=%d. Ignorando.",
                operando, current_pid);
       escribir_log(msg);
-      printf(ANSI_FG_B_MAGENTA "[KERNEL]" ANSI_RESET " Syscall inválida ignorada para PID=%d\n", current_pid);
+      if (!cpu_running) {
+          printf(ANSI_FG_B_MAGENTA "[KERNEL]" ANSI_RESET " Syscall inválida ignorada para PID=%d\n", current_pid);
+      }
       return 0; /* No manejado: dejar que la ISR en RAM ejecute RETRN */
 
     /* Código 1: Código de interrupción inválido */
@@ -254,7 +221,9 @@ int kernel_interrupt_handler(int codigo, int operando) {
                "KERNEL: Código de interrupción inválido recibido. PID=%d.",
                current_pid);
       escribir_log(msg);
-      printf(ANSI_FG_B_MAGENTA "[KERNEL]" ANSI_RESET " Interrupción inválida ignorada.\n");
+      if (!cpu_running) {
+          printf(ANSI_FG_B_MAGENTA "[KERNEL]" ANSI_RESET " Interrupción inválida ignorada.\n");
+      }
       return 0; /* No manejado: RETRN restaurará el contexto */
 
     /* Código 2: Llamada al sistema (SVC) */
@@ -281,27 +250,46 @@ int kernel_interrupt_handler(int codigo, int operando) {
       switch (syscall_code) {
 
       case 1: /* termina_prog(estado) */
-          /* El programa puso un código de estado en el stack
-           * con PSH antes de llamar a SVC. Lo leemos. */
+          /*
+           * Recupera el contexto del usuario de la pila del
+           * sistema antes de llamar kernel_pop_stack. Cuando lanzarInterrupcion()
+           * procesó el SVC, empujó PC/AC/RX/RB/RL/CC/Mode al system stack.
+           * process_save_context_from_interrupt() los saca y los guarda en el
+           * PCB. Esto asegura que kernel_pop_stack use el SP y la base del
+           * usuario (ctx.sp, p->base) y no los de la CPU en modo kernel.
+           */
+          process_save_context_from_interrupt(current_pid);
           kernel_pop_stack(current_pid, &param);
           snprintf(msg, sizeof(msg),
                    "KERNEL: Syscall 1 (TERMINAR) PID=%d, estado=%d",
                    current_pid, param);
           escribir_log(msg);
-          printf(ANSI_FG_B_MAGENTA "[KERNEL]" ANSI_RESET " PID=%d solicita terminar (estado=%d)\n",
-                 current_pid, param);
+          if (!cpu_running) {
+              printf(ANSI_FG_B_MAGENTA "[KERNEL]" ANSI_RESET " PID=%d solicita terminar (estado=%d)\n",
+                     current_pid, param);
+          }
           scheduler_handle_terminate();
-          return 1; /* Manejado: proceso eliminado */
+          return 1; /* proceso eliminado */
 
       case 2: /* imprime_pantalla(valor) */
-          /* El programa puso el valor a imprimir en el stack. */
+          /*
+           * Igual que syscall 1, recuperamos el contexto del
+           * usuario desde la pila del sistema antes de leer el parámetro.
+           * Además, retornamos 1 y restauramos el contexto
+           * explícitamente, para que el proceso continúe exactamente donde
+           * se quedó (con PC apuntando a la instrucción siguiente a SVC).
+           */
+          process_save_context_from_interrupt(current_pid);
           kernel_pop_stack(current_pid, &param);
           snprintf(msg, sizeof(msg),
                    "KERNEL: Syscall 2 (IMPRIMIR) PID=%d, valor=%d",
                    current_pid, param);
           escribir_log(msg);
           printf("\n" ANSI_FG_B_GREEN "[PANTALLA PID=%d]:" ANSI_RESET " %d\n", current_pid, param);
-          return 0; /* No manejado: RETRN restaurará contexto */
+          /* Restaurar contexto del usuario y marcar como RUNNING */
+          process_load_context(current_pid);
+          process_change_state(current_pid, STATE_RUNNING);
+          return 1; /* Manejado: nosotros restauramos, no ejecutar RETRN */
 
       case 3: { /* leer_pantalla() */
           /* Leemos un entero del teclado y lo dejamos en el AC
@@ -341,22 +329,119 @@ int kernel_interrupt_handler(int codigo, int operando) {
           return 1; /* Manejado: proceso dormido */
 
       default:
+          /* Protección: syscall desconocida TERMINA el proceso.
+           * Si no hacemos esto, RETRN restaura el contexto y el
+           * proceso vuelve a ejecutar SVC → bucle infinito. */
+          process_save_context_from_interrupt(current_pid);
           snprintf(msg, sizeof(msg),
-                   "KERNEL: Syscall desconocida (código AC=%d) PID=%d",
+                   "KERNEL: Syscall desconocida (código AC=%d) PID=%d. Terminando proceso.",
                    syscall_code, current_pid);
           escribir_log(msg);
-          printf("[KERNEL] Syscall %d no reconocida para PID=%d\n",
-                 syscall_code, current_pid);
-          return 0; /* No manejado: RETRN restaura y sigue */
+          if (!cpu_running) {
+              printf("[KERNEL] Syscall %d no reconocida para PID=%d. Terminando.\n",
+                     syscall_code, current_pid);
+          }
+          scheduler_handle_terminate();
+          return 1; /* Manejado: proceso terminado */
       }
     }
 
-    /* Código 3: Interrupción de reloj */
-    case INT_CLOCK:
+    case INT_CLOCK: {
+      /* a) Avanzar el reloj global del sistema operativo */
+      system_ticks++;
       snprintf(msg, sizeof(msg),
-               "KERNEL: Tick de reloj (system_ticks=%d).", system_ticks);
+               "KERNEL: INT_CLOCK tick=%d, PID=%d.",
+               system_ticks, current_pid);
       escribir_log(msg);
-      return 0; /* No manejado: RETRN restaurará contexto */
+
+      /* b) Despertar procesos SLEEPING cuyo tiempo cumplio */
+      for (int _i = 0; _i < MAX_PROCESSES; _i++) {
+          if (process_table[_i].state == STATE_SLEEPING &&
+              process_table[_i].wake_tick <= system_ticks) {
+              process_change_state(_i, STATE_READY);
+              char wlog[128];
+              snprintf(wlog, sizeof(wlog),
+                       "SCHEDULER: PID=%d despertado por INT_CLOCK en tick=%d.",
+                       _i, system_ticks);
+              escribir_log(wlog);
+              if (!cpu_running) {
+                  printf(ANSI_FG_B_YELLOW "[SCHEDULER]" ANSI_RESET
+                         " PID=%d desperto (tick=%d).\n", _i, system_ticks);
+              }
+          }
+      }
+
+      /* c-d) Gestion del quantum si hay un proceso corriendo */
+      if (current_pid != -1 &&
+          process_table[current_pid].state == STATE_RUNNING) {
+
+          process_table[current_pid].quantum_counter++;
+          snprintf(msg, sizeof(msg),
+                   "KERNEL: PID=%d quantum=%d/%d en tick=%d.",
+                   current_pid,
+                   process_table[current_pid].quantum_counter,
+                   PROCESS_QUANTUM, system_ticks);
+          escribir_log(msg);
+
+          if (process_table[current_pid].quantum_counter >= PROCESS_QUANTUM) {
+              int next = scheduler_next_ready();
+
+              if (next != -1 && next != current_pid) {
+                    /*
+                   * lanzarInterrupcion() empujo 7 registros al system stack.
+                   * process_save_context_from_interrupt() los extrae (sysPop x7)
+                   * y los guarda en el PCB del proceso saliente.
+                   * Asi el system stack queda vacio y consistente.
+                   */
+                  int saliente = current_pid;
+                  process_save_context_from_interrupt(saliente);
+                  process_change_state(saliente, STATE_READY);
+                  process_table[saliente].quantum_counter = 0;
+
+                  current_pid = next;
+                  process_load_context(next);
+                  process_table[next].quantum_counter = 0;
+                  process_change_state(next, STATE_RUNNING);
+
+                  char qlog[256];
+                  snprintf(qlog, sizeof(qlog),
+                           "[LOG] Quantum agotado. Proceso saliente: %d, Proceso entrante: %d",
+                           saliente, next);
+                  escribir_log(qlog);
+                  if (!cpu_running) {
+                      printf(ANSI_FG_B_YELLOW "[SCHEDULER]" ANSI_RESET
+                             " Quantum agotado via INT_CLOCK."
+                             " Sale PID=%d -> Entra PID=%d (tick=%d).\n",
+                             saliente, next, system_ticks);
+                  }
+
+                  /* Stack vaciado por save_context_from_interrupt: no ejecutar RETRN */
+                  return 1;
+
+              } else {
+                  /* Sin preempcion: solo un proceso disponible, sigue el mismo */
+                  char qlog[256];
+                  snprintf(qlog, sizeof(qlog),
+                           "[LOG] Quantum agotado. Proceso saliente: %d, Proceso entrante: %d",
+                           current_pid, current_pid);
+                  escribir_log(qlog);
+                  if (!cpu_running) {
+                      printf(ANSI_FG_B_YELLOW "[SCHEDULER]" ANSI_RESET
+                             " Quantum agotado. PID=%d sigue (tick=%d).\n",
+                             current_pid, system_ticks);
+                  }
+                  process_table[current_pid].quantum_counter = 0;
+              }
+          }
+      }
+
+      /*
+       * Sin preempcion: retornar 0 para que el hardware ejecute RETRN.
+       * RETRN hace sysPop x7, vaciando lo que lanzarInterrupcion() empujo,
+       * y restaura el proceso actual exactamente donde estaba.
+       */
+      return 0;
+    }
 
     /* Código 4: Fin de Entrada/Salida (DMA completado) */
     case INT_IO_COMPLETE:
@@ -364,7 +449,9 @@ int kernel_interrupt_handler(int codigo, int operando) {
                "KERNEL: DMA completado. Transferencia E/S finalizada (PID=%d).",
                current_pid);
       escribir_log(msg);
-      printf("[KERNEL] DMA completado para PID=%d\n", current_pid);
+      if (!cpu_running) {
+          printf("[KERNEL] DMA completado para PID=%d\n", current_pid);
+      }
       return 0; /* No manejado: RETRN restaurará contexto */
 
     /* Códigos 5,6: Errores fatales (instrucción/dirección) */
@@ -375,8 +462,10 @@ int kernel_interrupt_handler(int codigo, int operando) {
                "KERNEL: Error Fatal (Int %d) en PID=%d. Terminando proceso.",
                codigo, current_pid);
       escribir_log(msg);
-      printf("\n[ERROR FATAL] PID=%d causa interrupción %d. Abortando.\n",
-             current_pid, codigo);
+      if (!cpu_running) {
+          printf("\n[ERROR FATAL] PID=%d causa interrupción %d. Abortando.\n",
+                 current_pid, codigo);
+      }
       scheduler_handle_terminate();
       return 1; /* Manejado: proceso ya terminado */
 
@@ -390,9 +479,11 @@ int kernel_interrupt_handler(int codigo, int operando) {
                (codigo == INT_OVERFLOW) ? "Overflow" : "Underflow",
                current_pid);
       escribir_log(msg);
-      printf("\n[ERROR ARITMÉTICO] PID=%d: %s. Abortando.\n",
-             current_pid,
-             (codigo == INT_OVERFLOW) ? "Overflow" : "Underflow");
+      if (!cpu_running) {
+          printf("\n[ERROR ARITMÉTICO] PID=%d: %s. Abortando.\n",
+                 current_pid,
+                 (codigo == INT_OVERFLOW) ? "Overflow" : "Underflow");
+      }
       scheduler_handle_terminate();
       return 1; /* Manejado: proceso ya terminado */
 

@@ -70,6 +70,7 @@ void process_init(void) {
         process_table[i].entry_point      =  0;
         process_table[i].quantum_counter  =  0;
         process_table[i].wake_tick        =  0;
+        process_table[i].inst_count       =  0;
         memset(&process_table[i].ctx, 0, sizeof(ProcessContext_t));
     }
     for (int i = 0; i < NUM_PARTITIONS; i++) {
@@ -130,11 +131,13 @@ void process_change_state(int pid, ProcessState new_state) {
             state_to_string(new_state),
             system_ticks);
     escribir_log(msg);
-    printf(ANSI_FG_GREEN "[PROCESO]" ANSI_RESET " PID=%d (%s): %s -> %s\n",
-            pid,
-            process_table[pid].name,
-            state_to_string(old_state),
-            state_to_string(new_state));
+    if (!cpu_running) {
+        printf(ANSI_FG_GREEN "[PROCESO]" ANSI_RESET " PID=%d (%s): %s -> %s\n",
+                pid,
+                process_table[pid].name,
+                state_to_string(old_state),
+                state_to_string(new_state));
+    }
 }
 
 /* 
@@ -432,10 +435,15 @@ void process_load_context(int pid) {
  * IMPRIMIR TABLA DE PROCESOS (comando 'ps')
  */
 void process_print_table(void) {
+    /*
+     * ps: Muestra por pantalla de forma clara todos los procesos que están
+     * en el sistema, indicando su ID, estado, porcentaje de la memoria que
+     * utiliza y nombre de programa asociado.
+     */
     printf(ANSI_FG_B_BLUE "\n=== TABLA DE PROCESOS (tick=%d) ===\n" ANSI_RESET, system_ticks);
-    printf(ANSI_FG_CYAN "%-4s %-20s %-14s %-6s %-6s %-6s %-5s\n" ANSI_RESET,
-        "PID", "Nombre", "Estado", "Base", "Lím", "PC", "Q");
-    printf("------------------------------------------------------------\n");
+    printf(ANSI_FG_CYAN "%-4s %-20s %-14s %6s %-6s %-6s %-5s\n" ANSI_RESET,
+        "PID", "Nombre", "Estado", "Mem%", "Base", "PC", "Q");
+    printf("-------------------------------------------------------------------\n");
 
     int encontrado = 0;
     for (int i = 0; i < MAX_PROCESSES; i++) {
@@ -443,19 +451,25 @@ void process_print_table(void) {
         if (process_table[i].state == STATE_TERMINATED &&
             process_table[i].name[0] == '\0') continue;
 
-        printf("%-4d %-20s %-14s %-6d %-6d %-6d %-5d\n",
+        /* Porcentaje de RAM que usa este proceso respecto al total */
+        float pct = 0.0f;
+        if (process_table[i].partition_id >= 0) {
+            pct = ((float)PARTITION_SIZE / (float)RAM_SIZE) * 100.0f;
+        }
+
+        printf("%-4d %-20s %-14s %5.1f%% %-6d %-6d %-5d\n",
             i,
             process_table[i].name,
             state_to_string(process_table[i].state),
+            pct,
             process_table[i].base,
-            process_table[i].limit,
             process_table[i].ctx.pc,
             process_table[i].quantum_counter);
         encontrado = 1;
     }
     if (!encontrado)
         printf("(No hay procesos registrados)\n");
-    printf("====================================\n\n");
+    printf("===================================================================\n\n");
 }
 
 /* 
@@ -472,22 +486,40 @@ void process_print_table(void) {
  */
 int kernel_pop_stack(int pid, int *value) {
     if (pid < 0 || pid >= MAX_PROCESSES) return -1;
+    PCB_t *p = &process_table[pid];
 
-    int sp   = cpu.stack.sp;   /* SP lógico del usuario          */
-    int base = cpu.mp.base;    /* Base física de su partición     */
-    int phys = base + sp;      /* Dirección física real en RAM    */
+    /*
+     * Lee el parámetro de la PILA DEL USUARIO usando
+     * los valores guardados en el PCB (p->base, p->ctx.sp)
+     *
+     * process_save_context_from_interrupt() fue llamado antes
+     * de este punto (por el manejador de la syscall) y ya guardó el
+     * PC/AC/RX/RB/RL/CC/Mode del usuario en el PCB. Por tanto p->ctx.sp
+     * y p->base contienen los valores correctos del proceso usuario,
+     * independientemente del modo actual de la CPU.
+     *
+     * Direccionamiento:
+     *   p->base   = dirección física de inicio de la partición RAM
+     *   p->ctx.sp = índice lógico dentro de la partición
+     *   phys      = p->base + p->ctx.sp  (dirección física en RAM)
+     */
+    int sp   = p->ctx.sp;    /* SP lógico del proceso (del PCB)  */
+    int base = p->base;      /* Base física de su partición RAM  */
+    int phys = base + sp;    /* Dirección física real en RAM     */
 
     /* Validar que la dirección física está dentro de la RAM */
     if (phys < 0 || phys >= RAM_SIZE) {
-        printf("[KERNEL] ERROR: kernel_pop_stack dirección inválida %d\n", phys);
+        printf("[KERNEL] ERROR: kernel_pop_stack dir.inválida phys=%d "
+            "(base=%d, sp=%d)\n", phys, base, sp);
         return -1;
     }
 
     /* Leer el valor en signo-magnitud y convertir a entero C */
     *value = obtenerValorReal(RAM[phys]);
 
-    /* Actualizar SP del proceso (pop = mover SP hacia arriba) */
-    cpu.stack.sp++;
+    /* Pop: mover SP hacia arriba en el PCB Y en la CPU para consistencia */
+    p->ctx.sp++;
+    cpu.stack.sp = p->ctx.sp;   /* Mantener CPU en sync con PCB */
 
-    return 0; 
+    return 0;
 }
