@@ -851,8 +851,6 @@ void decodeExecute() {
     log_inicio_instruccion(cpu.PSW.pc, cpu.IR.opcode);
     
     /* PSH siempre empuja el valor de AC a la pila.
-     * Referencia: Bryan usa  memory_write(SP, AC)  directamente.
-     * ERROR ANTERIOR: se usaba obtenerOperando() que para PSH 25000000
      * (addressing=0, operand=0) leía leerMemoria(0) = RAM[RB] = primera
      * instrucción del programa, NO el valor del AC. */
 

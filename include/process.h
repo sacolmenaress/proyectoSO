@@ -142,4 +142,4 @@ void process_print_table(void);
  * Retorna 0 si éxito, -1 si error. */
 int kernel_pop_stack(int pid, int *value);
 
-#endif /* PROCESS_H */
+#endif 

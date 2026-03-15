@@ -28,4 +28,4 @@
 /* Macros para limpiar pantalla */
 #define CLEAR_SCREEN()  printf("\x1b[2J\x1b[H")
 
-#endif /* CONSOLE_COLORS_H */
+#endif
